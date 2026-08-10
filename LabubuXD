@@ -944,18 +944,18 @@ local GlobalCachedMessages, GlobalUIElements = {}, {}
 local ServerCachedMessages, ServerUIElements = {}, {}
 
 -- Moderation state. Mutes are scoped to GLOBAL or SERVER chat and expire automatically.
-local ActiveMutes = {}
+local Moderation = { ActiveMutes = {} }
 
-local ANNOUNCEMENT_FONT_MAP = {
+Moderation.ANNOUNCEMENT_FONT_MAP = {
     a="ᴀ", b="ʙ", c="ᴄ", d="ᴅ", e="ᴇ", f="ꜰ", g="ɢ", h="ʜ", i="ɪ", j="ᴊ",
     k="ᴋ", l="ʟ", m="ᴍ", n="ɴ", o="ᴏ", p="ᴘ", q="Q", r="ʀ", s="ꜱ", t="ᴛ",
     u="ᴜ", v="ᴠ", w="ᴡ", x="x", y="ʏ", z="ᴢ"
 }
 
-local function ToAnnouncementFont(text)
+Moderation.ToAnnouncementFont = function(text)
     text = tostring(text or "")
     return (text:gsub("%a", function(ch)
-        local mapped = ANNOUNCEMENT_FONT_MAP[string.lower(ch)]
+        local mapped = Moderation.ANNOUNCEMENT_FONT_MAP[string.lower(ch)]
         if not mapped then return ch end
         if ch:match("%u") then
             return mapped
@@ -964,18 +964,18 @@ local function ToAnnouncementFont(text)
     end))
 end
 
-local function NormalizeName(s)
+Moderation.NormalizeName = function(s)
     return string.lower(tostring(s or ""))
 end
 
-local function ResolveModerationTarget(query)
+Moderation.ResolveModerationTarget = function(query)
     query = tostring(query or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if query == "" then return nil end
-    local needle = NormalizeName(query)
+    local needle = Moderation.NormalizeName(query)
 
     local function checkPlayer(player)
-        local name = NormalizeName(player.Name)
-        local display = NormalizeName(player.DisplayName)
+        local name = Moderation.NormalizeName(player.Name)
+        local display = Moderation.NormalizeName(player.DisplayName)
         if name == needle or display == needle then return player.Name, player.DisplayName end
     end
 
@@ -986,8 +986,8 @@ local function ResolveModerationTarget(query)
 
     local bestUsername, bestDisplay
     for _, player in ipairs(Players:GetPlayers()) do
-        local name = NormalizeName(player.Name)
-        local display = NormalizeName(player.DisplayName)
+        local name = Moderation.NormalizeName(player.Name)
+        local display = Moderation.NormalizeName(player.DisplayName)
         if string.sub(name, 1, #needle) == needle or string.sub(display, 1, #needle) == needle then
             if not bestUsername then
                 bestUsername, bestDisplay = player.Name, player.DisplayName
@@ -1001,7 +1001,7 @@ local function ResolveModerationTarget(query)
             if type(msg) == "table" then
                 local username = tostring(msg.Username or "")
                 local display = tostring(msg.DisplayName or username)
-                local lu, ld = NormalizeName(username), NormalizeName(display)
+                local lu, ld = Moderation.NormalizeName(username), Moderation.NormalizeName(display)
                 if lu == needle or ld == needle or string.sub(lu, 1, #needle) == needle or string.sub(ld, 1, #needle) == needle then
                     return username, display
                 end
@@ -1011,28 +1011,28 @@ local function ResolveModerationTarget(query)
     return nil
 end
 
-local function GetMuteKey(scope, username)
-    return tostring(scope) .. "|" .. NormalizeName(username)
+Moderation.GetMuteKey = function(scope, username)
+    return tostring(scope) .. "|" .. Moderation.NormalizeName(username)
 end
 
-local function GetActiveMute(scope, username)
-    local key = GetMuteKey(scope, username)
-    local mute = ActiveMutes[key]
+Moderation.GetActiveMute = function(scope, username)
+    local key = Moderation.GetMuteKey(scope, username)
+    local mute = Moderation.ActiveMutes[key]
     if mute and tonumber(mute.ExpiresAt or 0) > os.time() then
         return mute
     end
-    ActiveMutes[key] = nil
+    Moderation.ActiveMutes[key] = nil
     return nil
 end
 
-local function FormatMuteRemaining(seconds)
+Moderation.FormatMuteRemaining = function(seconds)
     seconds = math.max(0, math.floor(tonumber(seconds) or 0))
     local minutes = math.floor(seconds / 60)
     local secs = seconds % 60
     return string.format("%02d:%02d", minutes, secs)
 end
 
-local function RefreshAllRoleAutocomplete()
+Moderation.RefreshAllRoleAutocomplete = function()
     local optionsMap = { ["!tag"] = true, ["!role"] = true, ["!spoof"] = true, ["!announce "] = true, ["!mute "] = true, ["/w "] = true }
    
     for rankName, _ in pairs(RANK_STYLES) do
@@ -1050,7 +1050,7 @@ local function RefreshAllRoleAutocomplete()
         table.insert(ALL_AUTOCOMPLETE_OPTIONS, opt)
     end
 end
-RefreshAllRoleAutocomplete()
+Moderation.RefreshAllRoleAutocomplete()
 
 -- ============================================================================
 -- ENCODING UTILITY
@@ -1155,7 +1155,7 @@ local function FetchRemoteRankStyles()
         end
     end
 
-    RefreshAllRoleAutocomplete()
+    Moderation.RefreshAllRoleAutocomplete()
 end
 
 local function FetchRemoteRoles()
@@ -1195,7 +1195,7 @@ local function FetchRemoteRoles()
             end
         end
     end
-    RefreshAllRoleAutocomplete()
+    Moderation.RefreshAllRoleAutocomplete()
 end
 
 -- ============================================================================
@@ -2538,12 +2538,12 @@ local ContextList = Instance.new("UIListLayout")
 ContextList.SortOrder = Enum.SortOrder.LayoutOrder
 ContextList.Parent = ContextMenu
 
-local function HideMessageContextMenu()
+function HideMessageContextMenu()
     ContextMenu.Visible = false
     CurrentContextMessage = nil
 end
 
-local function ResolvePrivateRecipient(prefix)
+function ResolvePrivateRecipient(prefix)
     prefix = tostring(prefix or "")
     if prefix == "" then return nil end
     local needle = string.lower(string.sub(prefix, 1, 8))
@@ -2572,11 +2572,11 @@ local function ResolvePrivateRecipient(prefix)
     return nil
 end
 
-local function IsPrivateModeActive()
+function IsPrivateModeActive()
     return PrivateModeTargetUsername ~= nil and PrivateModeTargetDisplayName ~= nil
 end
 
-local function RefreshPrivateModeUI()
+function RefreshPrivateModeUI()
     if not PrivateModePill then return end
     local active = IsPrivateModeActive()
     PrivateModePill.Visible = active
@@ -2590,7 +2590,7 @@ end
 -- The /pvt command is NOT stored inside the TextBox anymore.
 -- PVT state lives entirely in these two variables. The pill is the explicit
 -- mode indicator/control and the textbox remains a normal editable textbox.
-local function SetPersistentPrivatePrefix(displayName, username)
+function SetPersistentPrivatePrefix(displayName, username)
     local safeName = tostring(displayName or username or "Unknown")
     PrivateModeTargetUsername = username
     PrivateModeTargetDisplayName = safeName
@@ -2615,7 +2615,7 @@ ClearPersistentPrivatePrefix = function()
     RefreshPrivateModeUI()
 end
 
-local function ShowMessageContextMenu(msgData, position)
+function ShowMessageContextMenu(msgData, position)
     CurrentContextMessage = msgData
     ContextMenu.Visible = true
     ContextMenu.Position = UDim2.fromOffset(position.X, position.Y)
@@ -2631,7 +2631,7 @@ local function ShowMessageContextMenu(msgData, position)
     end)
 end
 
-local function AddContextMenuButton(text, order, callback)
+function AddContextMenuButton(text, order, callback)
     local button = Instance.new("TextButton")
     button.Name = text:gsub("%s+", "") .. "Button"
     button.Size = UDim2.new(1, 0, 0, 40)
@@ -2657,7 +2657,7 @@ local function AddContextMenuButton(text, order, callback)
     return button
 end
 
-local function BuildMessageContextMenu()
+function BuildMessageContextMenu()
     for _, child in ipairs(ContextMenu:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
@@ -2704,7 +2704,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 -- Draggable Logic
-local function MakeDraggable(frame, dragHandle)
+function MakeDraggable(frame, dragHandle)
     local dragging, dragInput, dragStart, startPos
     dragHandle = dragHandle or frame
 
@@ -2740,7 +2740,7 @@ MakeDraggable(ToggleButton, ToggleButton)
 -- ============================================================================
 -- TAB SWITCHING ROUTINE
 -- ============================================================================
-local function SwitchTab(newTab)
+function SwitchTab(newTab)
     ActiveTab = newTab
     MessageContainer.Visible = (newTab == "GLOBAL" or newTab == "SERVER")
     InputBarFrame.Visible = (newTab == "GLOBAL" or newTab == "SERVER")
@@ -3064,14 +3064,14 @@ local function TestNotification()
     }, testId)
 end
 
-local function PostModerationPayload(payload, isGlobal)
+Moderation.PostModerationPayload = function(payload, isGlobal)
     local endpoint = isGlobal and GLOBAL_MESSAGES_ENDPOINT or SERVER_MESSAGES_ENDPOINT
     task.spawn(function()
         pcall(function() HttpRequest(endpoint, "POST", payload) end)
     end)
 end
 
-local function RenderLocalMessage(payload, isGlobal)
+Moderation.RenderLocalMessage = function(payload, isGlobal)
     local cache = isGlobal and GlobalCachedMessages or ServerCachedMessages
     local ui = isGlobal and GlobalUIElements or ServerUIElements
     local key = "local_" .. tostring(payload.ClientMessageId or (payload.Timestamp .. "_" .. math.random(100000, 999999)))
@@ -3081,9 +3081,9 @@ local function RenderLocalMessage(payload, isGlobal)
     table.insert(ui, card)
 end
 
-local function SendAnnouncement(body)
+Moderation.SendAnnouncement = function(body)
     local isGlobal = ActiveTab == "GLOBAL"
-    local text = ToAnnouncementFont(body)
+    local text = Moderation.ToAnnouncementFont(body)
     local clientMessageId = LocalPlayer.UserId .. "_announcement_" .. tostring(math.floor(os.clock() * 1000000)) .. "_" .. tostring(math.random(100000, 999999))
     local payload = {
         ClientMessageId = clientMessageId,
@@ -3098,11 +3098,11 @@ local function SendAnnouncement(body)
         Announcement = true,
         AnnouncementBy = GetFormattedDisplayName(LocalPlayer.DisplayName, true),
     }
-    RenderLocalMessage(payload, isGlobal)
-    PostModerationPayload(payload, isGlobal)
+    Moderation.RenderLocalMessage(payload, isGlobal)
+    Moderation.PostModerationPayload(payload, isGlobal)
 end
 
-local function SendMute(targetUsername, targetDisplayName, durationMinutes)
+Moderation.SendMute = function(targetUsername, targetDisplayName, durationMinutes)
     local isGlobal = ActiveTab == "GLOBAL"
     local expiresAt = os.time() + (durationMinutes * 60)
     local clientMessageId = LocalPlayer.UserId .. "_mute_" .. tostring(math.floor(os.clock() * 1000000)) .. "_" .. tostring(math.random(100000, 999999))
@@ -3125,8 +3125,8 @@ local function SendMute(targetUsername, targetDisplayName, durationMinutes)
         ImposedByDisplayName = GetFormattedDisplayName(LocalPlayer.DisplayName, true),
         Scope = isGlobal and "GLOBAL" or "SERVER",
     }
-    ActiveMutes[GetMuteKey(payload.Scope, targetUsername)] = payload
-    PostModerationPayload(payload, isGlobal)
+    Moderation.ActiveMutes[Moderation.GetMuteKey(payload.Scope, targetUsername)] = payload
+    Moderation.PostModerationPayload(payload, isGlobal)
     ShowLocalSystemMessage("[AI MoD] : 🔇 " .. targetDisplayName .. " has been muted for " .. tostring(durationMinutes) .. " minute(s).", true)
 end
 
@@ -3149,9 +3149,9 @@ SendChatMessage = function()
 
     if not isPrivate then
         local currentScope = (ActiveTab == "GLOBAL") and "GLOBAL" or "SERVER"
-        local ownMute = GetActiveMute(currentScope, LocalPlayer.Name)
+        local ownMute = Moderation.GetActiveMute(currentScope, LocalPlayer.Name)
         if ownMute then
-            local remaining = FormatMuteRemaining((tonumber(ownMute.ExpiresAt) or os.time()) - os.time())
+            local remaining = Moderation.FormatMuteRemaining((tonumber(ownMute.ExpiresAt) or os.time()) - os.time())
             local imposedBy = tostring(ownMute.ImposedByDisplayName or "Moderator")
             ShowLocalSystemMessage("[AI MoD] : 🔇 You can't chat for the next " .. remaining .. " due to a mute enforced by " .. imposedBy .. ".", true)
             MessageInput.Text = ""
@@ -3191,7 +3191,7 @@ SendChatMessage = function()
             MessageInput.Text = ""
             return
         end
-        SendAnnouncement(body)
+        Moderation.SendAnnouncement(body)
         MessageInput.Text = ""
         return
     elseif not isPrivate and string.sub(typedText, 1, 6) == "!mute " then
@@ -3208,18 +3208,18 @@ SendChatMessage = function()
             MessageInput.Text = ""
             return
         end
-        local targetUsername, targetDisplayName = ResolveModerationTarget(targetQuery)
+        local targetUsername, targetDisplayName = Moderation.ResolveModerationTarget(targetQuery)
         if not targetUsername then
             ShowLocalSystemMessage("[AI MoD] : Command failed. Player not found. Use their DisplayName, Username, or a unique prefix.", true)
             MessageInput.Text = ""
             return
         end
-        if NormalizeName(targetUsername) == NormalizeName(LocalPlayer.Name) then
+        if Moderation.NormalizeName(targetUsername) == Moderation.NormalizeName(LocalPlayer.Name) then
             ShowLocalSystemMessage("[AI MoD] : Command failed. You cannot mute yourself.", true)
             MessageInput.Text = ""
             return
         end
-        SendMute(targetUsername, targetDisplayName, duration)
+        Moderation.SendMute(targetUsername, targetDisplayName, duration)
         MessageInput.Text = ""
         return
     elseif not isPrivate and string.sub(typedText, 1, 5) == "!tag " then
@@ -3382,7 +3382,7 @@ MessageInput.FocusLost:Connect(function(enterPressed)
     if enterPressed then SendChatMessage() end
 end)
 
-local function BuildJoinMessagePayload()
+function BuildJoinMessagePayload()
     return {
         Username = "AI_MoD",
         DisplayName = "AI MoD",
@@ -3397,7 +3397,7 @@ local function BuildJoinMessagePayload()
     }
 end
 
-local function ShowLocalJoinMessage()
+function ShowLocalJoinMessage()
     local payload = BuildJoinMessagePayload()
     local localId = "local_join_" .. JoinEventId
 
@@ -3409,14 +3409,14 @@ local function ShowLocalJoinMessage()
     DisplayNewMessageNotif(payload, localId)
 end
 
-local function PostServerJoinMessage()
+function PostServerJoinMessage()
     local payload = BuildJoinMessagePayload()
     task.spawn(function()
         HttpRequest(SERVER_MESSAGES_ENDPOINT, "POST", payload)
     end)
 end
 
-local function PollMessages()
+function PollMessages()
     while true do
         FetchRemoteRankStyles()
         FetchRemoteRoles()
@@ -3426,10 +3426,10 @@ local function PollMessages()
             for id, msg in pairs(globalData) do
                 if type(msg) == "table" and msg.MuteAction then
                     if tonumber(msg.ExpiresAt or 0) > os.time() and msg.TargetUsername and msg.Scope == "GLOBAL" then
-                        ActiveMutes[GetMuteKey("GLOBAL", msg.TargetUsername)] = msg
+                        Moderation.ActiveMutes[Moderation.GetMuteKey("GLOBAL", msg.TargetUsername)] = msg
                     end
                 elseif type(msg) == "table" and msg.Timestamp and msg.Timestamp >= ScriptStartTime and (not msg.IsPrivate or msg.Username == LocalPlayer.Name or msg.TargetUsername == LocalPlayer.Name) then
-                    local blockedByMute = GetActiveMute("GLOBAL", msg.Username) ~= nil
+                    local blockedByMute = Moderation.GetActiveMute("GLOBAL", msg.Username) ~= nil
                     if blockedByMute and msg.Username ~= LocalPlayer.Name then
                         -- Muted users' messages are not rendered by clients while the mute is active.
                     else
@@ -3455,10 +3455,10 @@ local function PollMessages()
                     -- Already rendered locally.
                 elseif type(msg) == "table" and msg.MuteAction then
                     if tonumber(msg.ExpiresAt or 0) > os.time() and msg.TargetUsername and msg.Scope == "SERVER" then
-                        ActiveMutes[GetMuteKey("SERVER", msg.TargetUsername)] = msg
+                        Moderation.ActiveMutes[Moderation.GetMuteKey("SERVER", msg.TargetUsername)] = msg
                     end
                 elseif type(msg) == "table" and msg.Timestamp and msg.Timestamp >= ScriptStartTime and (not msg.IsPrivate or msg.Username == LocalPlayer.Name or msg.TargetUsername == LocalPlayer.Name) then
-                    local blockedByMute = GetActiveMute("SERVER", msg.Username) ~= nil
+                    local blockedByMute = Moderation.GetActiveMute("SERVER", msg.Username) ~= nil
                     if blockedByMute and msg.Username ~= LocalPlayer.Name then
                         -- Muted users' messages are not rendered by clients while the mute is active.
                     else
@@ -3492,7 +3492,7 @@ task.spawn(PollMessages)
 
 
 -- ARCHITECT / OVERSEER SPOOF PROTECTION
-local function KronosProtectedSpoofRole(name)
+function KronosProtectedSpoofRole(name)
     name = tostring(name or ""):lower()
     return name == "architect" or name == "overseer"
 end
