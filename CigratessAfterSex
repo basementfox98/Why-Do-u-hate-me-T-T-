@@ -87,7 +87,7 @@ local function button(parent,text,pos,size)
     b.Size = size
     b.Position = pos
     b.BackgroundColor3 = C().Button
-    b.BackgroundTransparency = 0.10
+    b.BackgroundTransparency = 0
     b.BorderSizePixel = 0
     b.Text = text
     b.TextColor3 = C().Text
@@ -127,8 +127,8 @@ Gradient.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(1,Color3.fromRGB(218,248,238))
 })
 Gradient.Transparency = NumberSequence.new({
-    NumberSequenceKeypoint.new(0,0.72),
-    NumberSequenceKeypoint.new(1,0.86)
+    NumberSequenceKeypoint.new(0,0),
+    NumberSequenceKeypoint.new(1,0)
 })
 Gradient.Parent = Main
 
@@ -306,7 +306,7 @@ local Search = Instance.new("TextBox")
 Search.Size = UDim2.fromOffset(250,34)
 Search.Position = UDim2.fromOffset(14,86)
 Search.BackgroundColor3 = C().Card
-Search.BackgroundTransparency = 0.12
+Search.BackgroundTransparency = 0
 Search.BorderSizePixel = 0
 Search.PlaceholderText = "Search emotes..."
 Search.Text = ""
@@ -323,7 +323,7 @@ local List = Instance.new("ScrollingFrame")
 List.Size = UDim2.fromOffset(250,274)
 List.Position = UDim2.fromOffset(14,128)
 List.BackgroundColor3 = C().Card
-List.BackgroundTransparency = 0.12
+List.BackgroundTransparency = 0
 List.BorderSizePixel = 0
 List.ScrollBarThickness = 4
 List.AutomaticCanvasSize = Enum.AutomaticSize.Y
@@ -349,7 +349,7 @@ local Panel = Instance.new("Frame")
 Panel.Size = UDim2.fromOffset(328,314)
 Panel.Position = UDim2.fromOffset(278,86)
 Panel.BackgroundColor3 = C().Card
-Panel.BackgroundTransparency = 0.10
+Panel.BackgroundTransparency = 0
 Panel.BorderSizePixel = 0
 Panel.Parent = Main
 makeCorner(Panel,15)
@@ -426,18 +426,15 @@ PageLabel.Parent = Panel
 local Prev = button(Main,"‹",UDim2.fromOffset(14,366),UDim2.fromOffset(38,34))
 local Next = button(Main,"›",UDim2.fromOffset(226,366),UDim2.fromOffset(38,34))
 
--- Basic known animations are always available so the GUI can load even
--- when catalog APIs are unavailable.
-local Emotes = {
-    {name="Wave",id="507770239"},
-    {name="Point",id="507770453"},
-    {name="Cheer",id="507770677"},
-    {name="Laugh",id="507770818"},
-    {name="Dance",id="507771019"},
-    {name="Dance 2",id="507776043"},
-    {name="Dance 3",id="507777268"},
-    {name="Idle",id="507766388"}
-}
+-- REAL ROBLOX AVATAR CATALOG EMOTES
+-- This follows the GazeOld approach: AvatarEditorService -> EmoteAnimation.
+-- It does NOT read the player's inventory.
+local PAGE_SIZE = 8
+local Emotes = {}
+local CatalogPage = nil
+local CatalogLoading = false
+local CatalogRequestId = 0
+local RenderId = 0
 
 local Cards = {}
 
@@ -459,11 +456,31 @@ local function playAnimation(id)
 
     stop()
 
+    local animationId = "rbxassetid://" .. id
+
+    -- Resolve the catalog asset first, matching the GazeOld method.
+    pcall(function()
+        local objects = game:GetObjects(animationId)
+        if objects and #objects > 0 then
+            local obj = objects[1]
+            local animation = obj:IsA("Animation") and obj or obj:FindFirstChildWhichIsA("Animation", true)
+            if animation and animation.AnimationId ~= "" then
+                animationId = animation.AnimationId
+            end
+        end
+    end)
+
     local anim = Instance.new("Animation")
-    anim.AnimationId = "rbxassetid://"..id
+    anim.AnimationId = animationId
+
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if not animator then
+        animator = Instance.new("Animator")
+        animator.Parent = humanoid
+    end
 
     local ok,track = pcall(function()
-        return humanoid:LoadAnimation(anim)
+        return animator:LoadAnimation(anim)
     end)
 
     if not ok or not track then
@@ -471,25 +488,20 @@ local function playAnimation(id)
         return
     end
 
-    track.Priority = Enum.AnimationPriority.Action
+    track.Priority = Enum.AnimationPriority.Action4
     track.Looped = true
 
-    if pcall(function() track:Play(0.1,1,State.Speed) end) then
+    local played = pcall(function()
+        track:Play(0.1, 1, State.Speed)
+    end)
+
+    anim:Destroy()
+
+    if played then
         State.Track = track
     else
         pcall(function() track:Destroy() end)
     end
-end
-
-local function filtered()
-    local result = {}
-    local q = string.lower(Search.Text or "")
-    for _,e in ipairs(Emotes) do
-        if q == "" or string.find(string.lower(e.name),q,1,true) then
-            table.insert(result,e)
-        end
-    end
-    return result
 end
 
 local function getCard(i)
@@ -498,7 +510,7 @@ local function getCard(i)
     local card = Instance.new("Frame")
     card.Size = UDim2.new(1,0,0,64)
     card.BackgroundColor3 = C().Button
-    card.BackgroundTransparency = 0.10
+    card.BackgroundTransparency = 0
     card.BorderSizePixel = 0
     card.Parent = List
     makeCorner(card,10)
@@ -530,68 +542,220 @@ local function getCard(i)
     return card
 end
 
-local function redraw()
-    local list = filtered()
-    local total = math.max(1,math.ceil(#list/State.PageSize))
-    State.Page = math.clamp(State.Page,1,total)
+local function clearCards()
+    for _,card in pairs(Cards) do
+        if card then
+            card.Visible = false
+        end
+    end
+end
 
-    local first = (State.Page-1)*State.PageSize+1
+local function renderCatalogPage(pageObject, pageNumber)
+    RenderId += 1
+    local thisRender = RenderId
 
-    for i=1,State.PageSize do
+    clearCards()
+    State.Selected = nil
+
+    local ok, currentPage = pcall(function()
+        return pageObject:GetCurrentPage()
+    end)
+
+    if not ok or type(currentPage) ~= "table" then
+        StatusLabel.Text = "Catalog error"
+        PageLabel.Text = "Page " .. tostring(pageNumber)
+        return
+    end
+
+    if #currentPage == 0 then
+        StatusLabel.Text = "No emotes found"
+        PageLabel.Text = "Page " .. tostring(pageNumber)
+        return
+    end
+
+    StatusLabel.Text = tostring(#currentPage) .. " emotes"
+    PageLabel.Text = "Page " .. tostring(pageNumber)
+
+    Emotes = {}
+    for _,item in ipairs(currentPage) do
+        if thisRender ~= RenderId then return end
+
+        local id = item.Id or item.AssetId
+        local name = item.Name or item.name or ("Emote " .. tostring(id or ""))
+
+        if id then
+            table.insert(Emotes, {
+                id = tostring(id),
+                name = tostring(name)
+            })
+        end
+    end
+
+    -- Fill the selected item from the actual catalog result.
+    for i=1,PAGE_SIZE do
         local card = getCard(i)
-        local e = list[first+i-1]
-
+        local e = Emotes[i]
         card.Visible = e ~= nil
+
         if e then
             local img = card:FindFirstChild("Image")
-            local name = card:FindFirstChild("Name")
-            local p = card:FindFirstChild("Play")
+            local nameLabel = card:FindFirstChild("Name")
+            local playButton = card:FindFirstChild("Play")
 
-            img.Image = "rbxthumb://type=Asset&id="..e.id.."&w=150&h=150"
-            name.Text = e.name
+            img.Image = "rbxthumb://type=Asset&id=" .. e.id .. "&w=150&h=150"
+            nameLabel.Text = e.name
 
-            -- Avoid creating repeated click connections.
-            if p:GetAttribute("Bound") ~= true then
-                p:SetAttribute("Bound",true)
-                p.MouseButton1Click:Connect(function()
-                    local currentName = name.Text
+            if playButton:GetAttribute("Bound") ~= true then
+                playButton:SetAttribute("Bound", true)
+                playButton.MouseButton1Click:Connect(function()
+                    local selected
                     for _,x in ipairs(Emotes) do
-                        if x.name == currentName then
-                            State.Selected = x
-                            PTitle.Text = x.name
-                            PSub.Text = "Animation ID: "..x.id
-                            Cover.Image = "rbxthumb://type=Asset&id="..x.id.."&w=300&h=300"
-                            playAnimation(x.id)
+                        if x.name == nameLabel.Text then
+                            selected = x
                             break
                         end
                     end
+                    if not selected then return end
+
+                    State.Selected = selected
+                    PTitle.Text = selected.name
+                    PSub.Text = "Animation ID: " .. selected.id
+                    Cover.Image = "rbxthumb://type=Asset&id=" .. selected.id .. "&w=300&h=300"
+                    playAnimation(selected.id)
                 end)
             end
         end
     end
 
-    PageLabel.Text = "Page "..State.Page.." / "..total
+    PageLabel.Text = "Page " .. tostring(pageNumber)
 end
 
-Search:GetPropertyChangedSignal("Text"):Connect(function()
-    State.Page = 1
-    redraw()
-end)
+local function makeCatalogParams(keyword)
+    local params
+    local ok = pcall(function()
+        params = CatalogSearchParams.new()
+        params.SearchKeyword = keyword or ""
+        params.CategoryFilter = Enum.CatalogCategoryFilter.None
+        params.SalesTypeFilter = Enum.SalesTypeFilter.All
+        params.AssetTypes = {Enum.AvatarAssetType.EmoteAnimation}
+        params.IncludeOffSale = true
+        params.Limit = PAGE_SIZE
+    end)
+    if ok then return params end
+    return nil
+end
 
-Prev.MouseButton1Click:Connect(function()
-    if State.Page > 1 then
-        State.Page -= 1
-        redraw()
-    end
-end)
+local function loadCatalog(keyword)
+    CatalogRequestId += 1
+    local requestId = CatalogRequestId
+    CatalogLoading = true
+    StatusLabel.Text = "Searching catalog..."
+    PageLabel.Text = "Loading..."
+    Prev.Active = false
+    Next.Active = false
 
-Next.MouseButton1Click:Connect(function()
-    local total = math.max(1,math.ceil(#filtered()/State.PageSize))
-    if State.Page < total then
+    task.spawn(function()
+        local params = makeCatalogParams(keyword)
+        if not params or requestId ~= CatalogRequestId then
+            CatalogLoading = false
+            return
+        end
+
+        local ok, result = pcall(function()
+            return AvatarEditorService:SearchCatalog(params)
+        end)
+
+        if requestId ~= CatalogRequestId then return end
+
+        if not ok or not result then
+            CatalogLoading = false
+            StatusLabel.Text = "Catalog unavailable"
+            PageLabel.Text = "Page 1"
+            return
+        end
+
+        CatalogPage = result
+        CatalogLoading = false
+        State.Page = 1
+        renderCatalogPage(result, 1)
+        Prev.Active = false
+        Next.Active = not result.IsFinished
+    end)
+end
+
+local function nextCatalogPage()
+    if CatalogLoading or not CatalogPage or CatalogPage.IsFinished then return end
+
+    CatalogLoading = true
+    Prev.Active = false
+    Next.Active = false
+    StatusLabel.Text = "Loading next page..."
+
+    task.spawn(function()
+        local ok = pcall(function()
+            CatalogPage:AdvanceToNextPageAsync()
+        end)
+
+        if not ok then
+            CatalogLoading = false
+            StatusLabel.Text = "Could not load page"
+            Prev.Active = State.Page > 1
+            Next.Active = true
+            return
+        end
+
         State.Page += 1
-        redraw()
-    end
+        CatalogLoading = false
+        renderCatalogPage(CatalogPage, State.Page)
+        Prev.Active = State.Page > 1
+        Next.Active = not CatalogPage.IsFinished
+    end)
+end
+
+local function previousCatalogPage()
+    if CatalogLoading or not CatalogPage or State.Page <= 1 then return end
+
+    CatalogLoading = true
+    Prev.Active = false
+    Next.Active = false
+    StatusLabel.Text = "Loading previous page..."
+
+    task.spawn(function()
+        local ok = pcall(function()
+            CatalogPage:AdvanceToPreviousPageAsync()
+        end)
+
+        if not ok then
+            CatalogLoading = false
+            StatusLabel.Text = "Could not load page"
+            Prev.Active = true
+            Next.Active = not CatalogPage.IsFinished
+            return
+        end
+
+        State.Page -= 1
+        CatalogLoading = false
+        renderCatalogPage(CatalogPage, State.Page)
+        Prev.Active = State.Page > 1
+        Next.Active = not CatalogPage.IsFinished
+    end)
+end
+
+local searchToken = 0
+Search:GetPropertyChangedSignal("Text"):Connect(function()
+    searchToken += 1
+    local token = searchToken
+    local query = Search.Text or ""
+
+    task.delay(0.4, function()
+        if token == searchToken then
+            loadCatalog(query)
+        end
+    end)
 end)
+
+Prev.MouseButton1Click:Connect(previousCatalogPage)
+Next.MouseButton1Click:Connect(nextCatalogPage)
 
 Play.MouseButton1Click:Connect(function()
     if State.Selected then playAnimation(State.Selected.id) end
@@ -690,5 +854,5 @@ UserInputService.InputBegan:Connect(function(input,processed)
     end
 end)
 
-redraw()
+loadCatalog("")
 print("[Saiki Emotes] Loaded successfully.")
