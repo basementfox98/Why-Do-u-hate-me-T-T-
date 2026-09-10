@@ -90,40 +90,40 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = CoreGui
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.fromOffset(430, 550)
-main.Position = UDim2.new(.5,-215,.5,-275)
+main.Size = UDim2.fromOffset(360, 430)
+main.Position = UDim2.new(.5,-180,.5,-215)
 main.BackgroundColor3 = Color3.fromRGB(245,245,247)
 main.BorderSizePixel = 0
 Instance.new("UICorner",main).CornerRadius=UDim.new(0,14)
 local stroke=Instance.new("UIStroke",main); stroke.Color=Color3.fromRGB(210,210,214)
 
 local title=Instance.new("TextLabel",main)
-title.Size=UDim2.new(1,-65,0,42); title.Position=UDim2.fromOffset(16,8)
+title.Size=UDim2.new(1,-105,0,36); title.Position=UDim2.fromOffset(12,7)
 title.BackgroundTransparency=1; title.Text="🏆 Ares TOP • Follower Tester"
-title.Font=Enum.Font.GothamBold; title.TextSize=16
+title.Font=Enum.Font.GothamBold; title.TextSize=14
 title.TextColor3=Color3.fromRGB(35,35,40); title.TextXAlignment=Enum.TextXAlignment.Left
 
 local close=Instance.new("TextButton",main)
-close.Size=UDim2.fromOffset(34,34); close.Position=UDim2.new(1,-44,0,10)
+close.Size=UDim2.fromOffset(28,28); close.Position=UDim2.new(1,-38,0,7)
 close.BackgroundColor3=Color3.fromRGB(230,230,234); close.Text="×"
 close.Font=Enum.Font.GothamBold; close.TextSize=20; close.TextColor3=Color3.fromRGB(50,50,55)
 close.BorderSizePixel=0; Instance.new("UICorner",close).CornerRadius=UDim.new(0,9)
 close.MouseButton1Click:Connect(function() gui:Destroy() end)
 
 local refresh=Instance.new("TextButton",main)
-refresh.Size=UDim2.fromOffset(120,32); refresh.Position=UDim2.fromOffset(16,53)
+refresh.Size=UDim2.fromOffset(105,28); refresh.Position=UDim2.fromOffset(12,45)
 refresh.BackgroundColor3=Color3.fromRGB(225,48,108); refresh.Text="↻ Refresh TOP"
 refresh.Font=Enum.Font.GothamBold; refresh.TextSize=12; refresh.TextColor3=Color3.new(1,1,1)
 refresh.BorderSizePixel=0; Instance.new("UICorner",refresh).CornerRadius=UDim.new(0,8)
 
 local selectedLabel=Instance.new("TextLabel",main)
-selectedLabel.Size=UDim2.new(1,-155,0,32); selectedLabel.Position=UDim2.fromOffset(145,53)
+selectedLabel.Size=UDim2.new(1,-130,0,28); selectedLabel.Position=UDim2.fromOffset(125,45)
 selectedLabel.BackgroundTransparency=1; selectedLabel.Text="Selected: none"
 selectedLabel.Font=Enum.Font.Gotham; selectedLabel.TextSize=12
 selectedLabel.TextColor3=Color3.fromRGB(75,75,80); selectedLabel.TextXAlignment=Enum.TextXAlignment.Left
 
 local list=Instance.new("ScrollingFrame",main)
-list.Size=UDim2.new(1,-32,0,250); list.Position=UDim2.fromOffset(16,92)
+list.Size=UDim2.new(1,-24,0,190); list.Position=UDim2.fromOffset(12,80)
 list.BackgroundColor3=Color3.fromRGB(252,252,253); list.BorderSizePixel=0
 list.ScrollBarThickness=5; list.CanvasSize=UDim2.new(); list.Parent=main
 Instance.new("UICorner",list).CornerRadius=UDim.new(0,10)
@@ -131,7 +131,7 @@ local layout=Instance.new("UIListLayout",list)
 layout.Padding=UDim.new(0,5); layout.HorizontalAlignment=Enum.HorizontalAlignment.Center
 
 local targetBox=Instance.new("TextBox",main)
-targetBox.Size=UDim2.fromOffset(150,36); targetBox.Position=UDim2.fromOffset(16,354)
+targetBox.Size=UDim2.fromOffset(125,32); targetBox.Position=UDim2.fromOffset(12,280)
 targetBox.BackgroundColor3=Color3.fromRGB(255,255,255); targetBox.BorderSizePixel=0
 targetBox.PlaceholderText="Target follower count"; targetBox.Text=""
 targetBox.Font=Enum.Font.Gotham; targetBox.TextSize=12; targetBox.TextColor3=Color3.fromRGB(40,40,45)
@@ -139,19 +139,19 @@ Instance.new("UICorner",targetBox).CornerRadius=UDim.new(0,8)
 Instance.new("UIStroke",targetBox).Color=Color3.fromRGB(220,220,224)
 
 local addBtn=Instance.new("TextButton",main)
-addBtn.Size=UDim2.fromOffset(118,36); addBtn.Position=UDim2.fromOffset(176,354)
-addBtn.BackgroundColor3=Color3.fromRGB(50,170,105); addBtn.Text="Set / Add TOP"
+addBtn.Size=UDim2.fromOffset(102,32); addBtn.Position=UDim2.fromOffset(143,280)
+addBtn.BackgroundColor3=Color3.fromRGB(50,170,105); addBtn.Text="Set Count"
 addBtn.Font=Enum.Font.GothamBold; addBtn.TextSize=11; addBtn.TextColor3=Color3.new(1,1,1)
 addBtn.BorderSizePixel=0; Instance.new("UICorner",addBtn).CornerRadius=UDim.new(0,8)
 
 local removeBtn=Instance.new("TextButton",main)
-removeBtn.Size=UDim2.fromOffset(118,36); removeBtn.Position=UDim2.fromOffset(300,354)
-removeBtn.BackgroundColor3=Color3.fromRGB(220,65,75); removeBtn.Text="Unfollow TOP"
+removeBtn.Size=UDim2.fromOffset(92,32); removeBtn.Position=UDim2.fromOffset(250,280)
+removeBtn.BackgroundColor3=Color3.fromRGB(220,65,75); removeBtn.Text="Remove TOP"
 removeBtn.Font=Enum.Font.GothamBold; removeBtn.TextSize=11; removeBtn.TextColor3=Color3.new(1,1,1)
 removeBtn.BorderSizePixel=0; Instance.new("UICorner",removeBtn).CornerRadius=UDim.new(0,8)
 
 local status=Instance.new("TextLabel",main)
-status.Size=UDim2.new(1,-32,0,80); status.Position=UDim2.fromOffset(16,402)
+status.Size=UDim2.new(1,-24,0,65); status.Position=UDim2.fromOffset(12,322)
 status.BackgroundTransparency=1
 status.Text="Select a player from TOP.\nSet/Add TOP adds TOP-listed IDs until the target count is reached."
 status.Font=Enum.Font.Gotham; status.TextSize=11; status.TextColor3=Color3.fromRGB(90,90,95)
@@ -188,7 +188,7 @@ local function render()
     list.CanvasSize=UDim2.fromOffset(0,layout.AbsoluteContentSize.Y+8)
 end
 
-local function addTopFollowers()
+local function setFollowerCount()
     if busy then return end
     if not current then setStatus("Select a player first."); return end
 
@@ -197,35 +197,48 @@ local function addTopFollowers()
     wanted=math.floor(wanted)
 
     busy=true
-    setStatus("Reading current followers...")
     local targetKey=tostring(current.uid)
     local existing=get(FOLLOWERS.."/"..esc(targetKey)..".json") or {}
     if type(existing)~="table" then existing={} end
 
-    local count=0
-    for _ in pairs(existing) do count+=1 end
-    if count>=wanted then
-        busy=false
-        setStatus(string.format("Already at %d followers. Target: %d.",count,wanted))
-        return
-    end
+    local keys={}
+    for uid in pairs(existing) do table.insert(keys,tostring(uid)) end
+    local count=#keys
+    local added,removed=0,0
 
-    local added=0
-    for _,row in ipairs(topRows) do
-        if count>=wanted then break end
-        local uid=tostring(row.uid)
-        if uid~=targetKey and existing[uid]==nil then
-            if put(FOLLOWERS.."/"..esc(targetKey).."/"..esc(uid)..".json",true) then
-                existing[uid]=true
-                count+=1
-                added+=1
+    -- Decrease/reset: delete real follower records until the requested count is reached.
+    if count>wanted then
+        setStatus(string.format("Reducing %s: %d → %d...",current.name,count,wanted))
+        for _,uid in ipairs(keys) do
+            if count<=wanted then break end
+            if del(FOLLOWERS.."/"..esc(targetKey).."/"..esc(uid)..".json") then
+                count-=1
+                removed+=1
+            end
+        end
+    -- Increase: use available TOP-listed account IDs not already following the target.
+    elseif count<wanted then
+        setStatus(string.format("Increasing %s: %d → %d...",current.name,count,wanted))
+        for _,row in ipairs(topRows) do
+            if count>=wanted then break end
+            local uid=tostring(row.uid)
+            if uid~=targetKey and existing[uid]==nil then
+                if put(FOLLOWERS.."/"..esc(targetKey).."/"..esc(uid)..".json",true) then
+                    existing[uid]=true
+                    count+=1
+                    added+=1
+                end
             end
         end
     end
 
     busy=false
     render()
-    setStatus(string.format("Finished.\nAdded %d follower records. %s now has %d.",added,current.name,count))
+    if count==wanted then
+        setStatus(string.format("Done. %s now has exactly %d followers.\nAdded: %d   Removed: %d",current.name,count,added,removed))
+    else
+        setStatus(string.format("Stopped at %d; target was %d.\nAvailable TOP accounts may be insufficient.",count,wanted))
+    end
 end
 
 local function removeTopFollowers()
@@ -261,8 +274,41 @@ refresh.MouseButton1Click:Connect(function()
     end)
 end)
 
-addBtn.MouseButton1Click:Connect(function() task.spawn(addTopFollowers) end)
+addBtn.MouseButton1Click:Connect(function() task.spawn(setFollowerCount) end)
 removeBtn.MouseButton1Click:Connect(function() task.spawn(removeTopFollowers) end)
+
+-- Hide/unhide: the small floating button remains available when the main panel is hidden.
+local mini=Instance.new("TextButton",gui)
+mini.Name="ShowButton"
+mini.Size=UDim2.fromOffset(92,30)
+mini.Position=UDim2.new(0,12,0.5,-15)
+mini.BackgroundColor3=Color3.fromRGB(225,48,108)
+mini.Text="Ares TOP"
+mini.Font=Enum.Font.GothamBold
+mini.TextSize=11
+mini.TextColor3=Color3.new(1,1,1)
+mini.BorderSizePixel=0
+mini.Visible=false
+Instance.new("UICorner",mini).CornerRadius=UDim.new(0,9)
+mini.MouseButton1Click:Connect(function()
+    main.Visible=true
+    mini.Visible=false
+end)
+
+local hide=Instance.new("TextButton",main)
+hide.Size=UDim2.fromOffset(28,28)
+hide.Position=UDim2.new(1,-72,0,7)
+hide.BackgroundColor3=Color3.fromRGB(230,230,234)
+hide.Text="—"
+hide.Font=Enum.Font.GothamBold
+hide.TextSize=16
+hide.TextColor3=Color3.fromRGB(50,50,55)
+hide.BorderSizePixel=0
+Instance.new("UICorner",hide).CornerRadius=UDim.new(0,9)
+hide.MouseButton1Click:Connect(function()
+    main.Visible=false
+    mini.Visible=true
+end)
 
 -- Drag the window from the title.
 do
