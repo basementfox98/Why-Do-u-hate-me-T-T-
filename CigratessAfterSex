@@ -1,1242 +1,660 @@
-```lua
---============================================================
---                 SAIKI EMOTES V1
---============================================================
--- Single circular hide button
--- Shared Anchor system for GUI + hide button
--- CherryBlossom Saiki Music style
---============================================================
+-- SAIKI EMOTES V1 - STABLE TEST BUILD
+-- One circular hide button + shared Anchor lock
+-- Search / pagination / play / stop / speed
+-- English only
 
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local AvatarEditorService = game:GetService("AvatarEditorService")
-local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then return end
 
---============================================================
--- CONFIG
---============================================================
+-- Executor HTTP compatibility
+local HttpRequest = request
+if not HttpRequest and syn then HttpRequest = syn.request end
+if not HttpRequest and http_request then HttpRequest = http_request end
+if not HttpRequest and http then HttpRequest = http.request end
 
-local GUI_NAME = "SAIKI_EMOTES_GUI"
+local GetCustomAsset = getcustomasset or getsynasset
 
-local EMOTES_PER_PAGE = 10
-
-local MIN_SPEED = 0.1
-local MAX_SPEED = 3
-local DEFAULT_SPEED = 1
-
--- Your GitHub image
-local HIDE_IMAGE_URL =
-    "https://raw.githubusercontent.com/SaikiWithTheBanHammer/ScriptBlox/main/AuraFarmerSaiki.jpg"
-
---============================================================
--- CLEAN OLD GUI
---============================================================
-
+-- Clean old copies
 pcall(function()
-    local old = CoreGui:FindFirstChild(GUI_NAME)
-    if old then
-        old:Destroy()
+    local x = CoreGui:FindFirstChild("SAIKI_EMOTES_GUI")
+    if x then x:Destroy() end
+end)
+pcall(function()
+    local x = CoreGui:FindFirstChild("SAIKI_EMOTES_HIDE")
+    if x then x:Destroy() end
+end)
+
+local State = {
+    Anchored = false,
+    Hidden = false,
+    Dark = false,
+    Page = 1,
+    PageSize = 8,
+    Search = "",
+    Selected = nil,
+    Track = nil,
+    Speed = 1,
+    StopOnMove = true
+}
+
+local Theme = {
+    Light = {
+        Main = Color3.fromRGB(248,245,255),
+        Card = Color3.fromRGB(255,255,255),
+        Text = Color3.fromRGB(45,38,58),
+        Sub = Color3.fromRGB(105,95,120),
+        Stroke = Color3.fromRGB(220,205,230),
+        Button = Color3.fromRGB(255,248,253)
+    },
+    Dark = {
+        Main = Color3.fromRGB(27,23,32),
+        Card = Color3.fromRGB(38,32,44),
+        Text = Color3.fromRGB(245,235,248),
+        Sub = Color3.fromRGB(175,160,180),
+        Stroke = Color3.fromRGB(85,70,95),
+        Button = Color3.fromRGB(48,40,55)
+    }
+}
+
+local function C()
+    return State.Dark and Theme.Dark or Theme.Light
+end
+
+local function makeCorner(obj, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0,radius)
+    c.Parent = obj
+    return c
+end
+
+local function makeStroke(obj)
+    local s = Instance.new("UIStroke")
+    s.Color = C().Stroke
+    s.Transparency = 0.25
+    s.Thickness = 1
+    s.Parent = obj
+    return s
+end
+
+local function button(parent,text,pos,size)
+    local b = Instance.new("TextButton")
+    b.Size = size
+    b.Position = pos
+    b.BackgroundColor3 = C().Button
+    b.BackgroundTransparency = 0.10
+    b.BorderSizePixel = 0
+    b.Text = text
+    b.TextColor3 = C().Text
+    b.TextSize = 13
+    b.Font = Enum.Font.GothamBold
+    b.AutoButtonColor = true
+    b.Parent = parent
+    makeCorner(b,10)
+    makeStroke(b)
+    return b
+end
+
+-- GUI
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "SAIKI_EMOTES_GUI"
+Gui.ResetOnSpawn = false
+Gui.IgnoreGuiInset = true
+Gui.DisplayOrder = 50
+Gui.Parent = CoreGui
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.fromOffset(620,420)
+Main.Position = UDim2.new(0.5,-310,0.5,-210)
+Main.BackgroundColor3 = C().Main
+Main.BackgroundTransparency = 0.03
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Parent = Gui
+makeCorner(Main,18)
+makeStroke(Main)
+
+local Gradient = Instance.new("UIGradient")
+Gradient.Rotation = 25
+Gradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,Color3.fromRGB(255,220,238)),
+    ColorSequenceKeypoint.new(0.5,Color3.fromRGB(232,220,255)),
+    ColorSequenceKeypoint.new(1,Color3.fromRGB(218,248,238))
+})
+Gradient.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0,0.72),
+    NumberSequenceKeypoint.new(1,0.86)
+})
+Gradient.Parent = Main
+
+local Scale = Instance.new("UIScale")
+Scale.Parent = Main
+
+local function updateScale()
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    local v = cam.ViewportSize
+    Scale.Scale = math.clamp(math.min(v.X/760,v.Y/520),0.70,1)
+end
+updateScale()
+pcall(function()
+    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+end)
+
+-- Header
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1,-28,0,68)
+Header.Position = UDim2.fromOffset(14,10)
+Header.BackgroundTransparency = 1
+Header.Active = true
+Header.Parent = Main
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.fromOffset(46,46)
+Logo.Position = UDim2.fromOffset(0,8)
+Logo.BackgroundTransparency = 1
+Logo.Image = "rbxassetid://6379534047"
+Logo.Parent = Header
+makeCorner(Logo,23)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.fromOffset(270,28)
+Title.Position = UDim2.fromOffset(58,8)
+Title.BackgroundTransparency = 1
+Title.Text = "SAIKI EMOTES"
+Title.TextColor3 = C().Text
+Title.TextSize = 22
+Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Header
+
+local Subtitle = Instance.new("TextLabel")
+Subtitle.Size = UDim2.fromOffset(280,20)
+Subtitle.Position = UDim2.fromOffset(59,36)
+Subtitle.BackgroundTransparency = 1
+Subtitle.Text = "EMOTES • SAIKI EDITION"
+Subtitle.TextColor3 = C().Sub
+Subtitle.TextSize = 11
+Subtitle.Font = Enum.Font.GothamMedium
+Subtitle.TextXAlignment = Enum.TextXAlignment.Left
+Subtitle.Parent = Header
+
+-- Shared drag function. Anchor affects BOTH GUI and hide button.
+local function draggable(handle,target)
+    local dragging = false
+    local startInput
+    local startPosition
+
+    handle.InputBegan:Connect(function(input)
+        if State.Anchored then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            startInput = input.Position
+            startPosition = target.Position
+
+            local ended
+            ended = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    if ended then ended:Disconnect() end
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging or State.Anchored then return end
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+            local delta = input.Position-startInput
+            target.Position = UDim2.new(
+                startPosition.X.Scale,startPosition.X.Offset+delta.X,
+                startPosition.Y.Scale,startPosition.Y.Offset+delta.Y
+            )
+        end
+    end)
+end
+
+draggable(Header,Main)
+
+-- Top-right controls
+local AnchorButton = button(Header,"🔓",UDim2.new(1,-104,0,12),UDim2.fromOffset(30,30))
+local ThemeButton = button(Header,"☾",UDim2.new(1,-68,0,12),UDim2.fromOffset(30,30))
+local CloseButton = button(Header,"×",UDim2.new(1,-32,0,12),UDim2.fromOffset(30,30))
+
+-- Hide button: ONE button only
+local HideGui = Instance.new("ScreenGui")
+HideGui.Name = "SAIKI_EMOTES_HIDE"
+HideGui.ResetOnSpawn = false
+HideGui.IgnoreGuiInset = true
+HideGui.DisplayOrder = 51
+HideGui.Parent = CoreGui
+
+local HideButton = Instance.new("ImageButton")
+HideButton.Size = UDim2.fromOffset(46,46)
+HideButton.Position = UDim2.new(0,18,0.5,-23)
+HideButton.BackgroundColor3 = Color3.fromRGB(255,245,252)
+HideButton.BorderSizePixel = 0
+HideButton.Image = ""
+HideButton.Parent = HideGui
+makeCorner(HideButton,23)
+local hs = Instance.new("UIStroke")
+hs.Color = Color3.fromRGB(215,165,205)
+hs.Thickness = 2
+hs.Parent = HideButton
+draggable(HideButton,HideButton)
+
+-- Load the requested GitHub image.
+task.spawn(function()
+    if not HttpRequest or not GetCustomAsset or not writefile then return end
+    local url = "https://raw.githubusercontent.com/SaikiWithTheBanHammer/ScriptBlox/main/AuraFarmerSaiki.jpg"
+    local ok,res = pcall(function()
+        return HttpRequest({Url=url,Method="GET"})
+    end)
+    if ok and res and res.Body and #res.Body > 0 then
+        local file = "Saiki_AuraFarmer_Hide.jpg"
+        if pcall(function() writefile(file,res.Body) end) then
+            local asset = pcall(function() return GetCustomAsset(file) end)
+            if asset then HideButton.Image = asset end
+        end
     end
 end)
 
---============================================================
--- GITHUB IMAGE LOADER
---============================================================
+-- Search/list
+local Search = Instance.new("TextBox")
+Search.Size = UDim2.fromOffset(250,34)
+Search.Position = UDim2.fromOffset(14,86)
+Search.BackgroundColor3 = C().Card
+Search.BackgroundTransparency = 0.12
+Search.BorderSizePixel = 0
+Search.PlaceholderText = "Search emotes..."
+Search.Text = ""
+Search.TextColor3 = C().Text
+Search.PlaceholderColor3 = C().Sub
+Search.TextSize = 13
+Search.Font = Enum.Font.Gotham
+Search.ClearTextOnFocus = false
+Search.Parent = Main
+makeCorner(Search,12)
+makeStroke(Search)
 
-local function loadGitHubImage(url)
+local List = Instance.new("ScrollingFrame")
+List.Size = UDim2.fromOffset(250,274)
+List.Position = UDim2.fromOffset(14,128)
+List.BackgroundColor3 = C().Card
+List.BackgroundTransparency = 0.12
+List.BorderSizePixel = 0
+List.ScrollBarThickness = 4
+List.AutomaticCanvasSize = Enum.AutomaticSize.Y
+List.CanvasSize = UDim2.new()
+List.Parent = Main
+makeCorner(List,12)
+makeStroke(List)
 
-    -- Executors that provide request + getcustomasset
-    if typeof(request) == "function"
-        and typeof(getcustomasset) == "function"
-    then
+local Pad = Instance.new("UIPadding")
+Pad.PaddingTop = UDim.new(0,7)
+Pad.PaddingBottom = UDim.new(0,7)
+Pad.PaddingLeft = UDim.new(0,7)
+Pad.PaddingRight = UDim.new(0,7)
+Pad.Parent = List
 
-        local ok, response = pcall(function()
-            return request({
-                Url = url,
-                Method = "GET"
-            })
-        end)
+local Layout = Instance.new("UIListLayout")
+Layout.Padding = UDim.new(0,6)
+Layout.SortOrder = Enum.SortOrder.LayoutOrder
+Layout.Parent = List
 
-        if ok
-            and response
-            and response.Body
-        then
+-- Player panel
+local Panel = Instance.new("Frame")
+Panel.Size = UDim2.fromOffset(328,314)
+Panel.Position = UDim2.fromOffset(278,86)
+Panel.BackgroundColor3 = C().Card
+Panel.BackgroundTransparency = 0.10
+Panel.BorderSizePixel = 0
+Panel.Parent = Main
+makeCorner(Panel,15)
+makeStroke(Panel)
 
-            local fileName =
-                "SaikiEmotes_HideButton.jpg"
+local PTitle = Instance.new("TextLabel")
+PTitle.Size = UDim2.new(1,-24,0,28)
+PTitle.Position = UDim2.fromOffset(12,12)
+PTitle.BackgroundTransparency = 1
+PTitle.Text = "Select an emote"
+PTitle.TextColor3 = C().Text
+PTitle.TextSize = 18
+PTitle.Font = Enum.Font.GothamBold
+PTitle.TextXAlignment = Enum.TextXAlignment.Left
+PTitle.Parent = Panel
 
-            local writeOK = pcall(function()
+local PSub = Instance.new("TextLabel")
+PSub.Size = UDim2.new(1,-24,0,18)
+PSub.Position = UDim2.fromOffset(12,40)
+PSub.BackgroundTransparency = 1
+PSub.Text = "Choose an emote from the list."
+PSub.TextColor3 = C().Sub
+PSub.TextSize = 11
+PSub.Font = Enum.Font.Gotham
+PSub.TextXAlignment = Enum.TextXAlignment.Left
+PSub.Parent = Panel
 
-                if typeof(writefile) == "function" then
-                    writefile(
-                        fileName,
-                        response.Body
-                    )
-                end
+local Cover = Instance.new("ImageLabel")
+Cover.Size = UDim2.fromOffset(136,136)
+Cover.Position = UDim2.fromOffset(12,70)
+Cover.BackgroundColor3 = C().Button
+Cover.BorderSizePixel = 0
+Cover.Parent = Panel
+makeCorner(Cover,14)
 
-            end)
+local SpeedLabel = Instance.new("TextLabel")
+SpeedLabel.Size = UDim2.fromOffset(145,22)
+SpeedLabel.Position = UDim2.fromOffset(164,78)
+SpeedLabel.BackgroundTransparency = 1
+SpeedLabel.Text = "Speed"
+SpeedLabel.TextColor3 = C().Text
+SpeedLabel.TextSize = 13
+SpeedLabel.Font = Enum.Font.GothamBold
+SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpeedLabel.Parent = Panel
 
-            if writeOK then
+local Speed = Instance.new("TextBox")
+Speed.Size = UDim2.fromOffset(145,34)
+Speed.Position = UDim2.fromOffset(164,103)
+Speed.BackgroundColor3 = C().Button
+Speed.BorderSizePixel = 0
+Speed.Text = "1"
+Speed.TextColor3 = C().Text
+Speed.TextSize = 13
+Speed.Font = Enum.Font.Gotham
+Speed.ClearTextOnFocus = false
+Speed.Parent = Panel
+makeCorner(Speed,9)
 
-                local assetOK, asset =
-                    pcall(function()
+local MoveButton = button(Panel,"Stop on move: ON",UDim2.fromOffset(164,148),UDim2.fromOffset(145,34))
+local Play = button(Panel,"PLAY",UDim2.fromOffset(12,222),UDim2.fromOffset(99,40))
+local Stop = button(Panel,"STOP",UDim2.fromOffset(117,222),UDim2.fromOffset(99,40))
 
-                        return getcustomasset(
-                            fileName
-                        )
+local PageLabel = Instance.new("TextLabel")
+PageLabel.Size = UDim2.fromOffset(95,28)
+PageLabel.Position = UDim2.fromOffset(222,228)
+PageLabel.BackgroundTransparency = 1
+PageLabel.Text = "Page 1"
+PageLabel.TextColor3 = C().Sub
+PageLabel.TextSize = 12
+PageLabel.Font = Enum.Font.GothamMedium
+PageLabel.Parent = Panel
 
-                    end)
+local Prev = button(Main,"‹",UDim2.fromOffset(14,366),UDim2.fromOffset(38,34))
+local Next = button(Main,"›",UDim2.fromOffset(226,366),UDim2.fromOffset(38,34))
 
-                if assetOK and asset then
-                    return asset
-                end
-
-            end
-
-        end
-
-    end
-
-    return ""
-
-end
-
---============================================================
--- IMAGE
---============================================================
-
-local HideButtonImage =
-    loadGitHubImage(
-        HIDE_IMAGE_URL
-    )
-
---============================================================
--- HELPERS
---============================================================
-
-local function create(className, properties, parent)
-
-    local object =
-        Instance.new(className)
-
-    for key, value in pairs(properties or {}) do
-        object[key] = value
-    end
-
-    object.Parent = parent
-
-    return object
-
-end
-
-local function rounded(object, radius)
-
-    local corner =
-        Instance.new("UICorner")
-
-    corner.CornerRadius =
-        UDim.new(
-            0,
-            radius
-        )
-
-    corner.Parent = object
-
-end
-
---============================================================
--- STATE
---============================================================
-
-local State = {
-
-    Anchored = false,
-
-    Hidden = false,
-
-    Theme = "Light",
-
-    Search = "",
-
-    Page = 1,
-
-    Results = {},
-
-    SelectedEmote = nil,
-
-    CurrentTrack = nil,
-
-    Speed = DEFAULT_SPEED,
-
-    StopWhenMoving = true,
-
-    Loading = false
-
+-- Basic known animations are always available so the GUI can load even
+-- when catalog APIs are unavailable.
+local Emotes = {
+    {name="Wave",id="507770239"},
+    {name="Point",id="507770453"},
+    {name="Cheer",id="507770677"},
+    {name="Laugh",id="507770818"},
+    {name="Dance",id="507771019"},
+    {name="Dance 2",id="507776043"},
+    {name="Dance 3",id="507777268"},
+    {name="Idle",id="507766388"}
 }
 
---============================================================
--- SCREEN GUI
---============================================================
+local Cards = {}
 
-local ScreenGui =
-    create(
-        "ScreenGui",
-        {
-            Name = GUI_NAME,
-
-            ResetOnSpawn = false,
-
-            IgnoreGuiInset = true,
-
-            DisplayOrder = 20,
-
-            ZIndexBehavior =
-                Enum.ZIndexBehavior.Sibling
-        },
-        CoreGui
-    )
-
---============================================================
--- MAIN WINDOW
---============================================================
-
-local Main =
-    create(
-        "Frame",
-        {
-            Name = "Main",
-
-            Size =
-                UDim2.fromOffset(
-                    620,
-                    420
-                ),
-
-            Position =
-                UDim2.new(
-                    0.5,
-                    -310,
-                    0.5,
-                    -210
-                ),
-
-            BackgroundColor3 =
-                Color3.fromRGB(
-                    248,
-                    245,
-                    255
-                ),
-
-            BorderSizePixel = 0,
-
-            ClipsDescendants = true,
-
-            Active = true,
-
-            ZIndex = 10
-        },
-        ScreenGui
-    )
-
-rounded(Main, 18)
-
-local MainStroke =
-    create(
-        "UIStroke",
-        {
-            Thickness = 1.5,
-
-            Transparency = 0.10,
-
-            Color =
-                Color3.fromRGB(
-                    210,
-                    180,
-                    210
-                )
-        },
-        Main
-    )
-
---============================================================
--- CHERRY BLOSSOM GRADIENT
---============================================================
-
-local Gradient =
-    create(
-        "UIGradient",
-        {
-            Rotation = 25,
-
-            Color =
-                ColorSequence.new({
-
-                    ColorSequenceKeypoint.new(
-                        0,
-                        Color3.fromRGB(
-                            255,
-                            226,
-                            241
-                        )
-                    ),
-
-                    ColorSequenceKeypoint.new(
-                        0.48,
-                        Color3.fromRGB(
-                            235,
-                            226,
-                            255
-                        )
-                    ),
-
-                    ColorSequenceKeypoint.new(
-                        1,
-                        Color3.fromRGB(
-                            213,
-                            247,
-                            241
-                        )
-                    )
-
-                })
-        },
-        Main
-    )
-
---============================================================
--- RESPONSIVE SCALE
---============================================================
-
-local UIScale =
-    create(
-        "UIScale",
-        {
-            Scale = 1
-        },
-        Main
-    )
-
-local function updateScale()
-
-    local camera =
-        workspace.CurrentCamera
-
-    if not camera then
-        return
+local function stop()
+    if State.Track then
+        pcall(function() State.Track:Stop(0.1) end)
+        pcall(function() State.Track:Destroy() end)
+        State.Track = nil
     end
-
-    local viewport =
-        camera.ViewportSize
-
-    local scale =
-        math.min(
-            viewport.X / 760,
-            viewport.Y / 520
-        )
-
-    UIScale.Scale =
-        math.clamp(
-            scale,
-            0.70,
-            1
-        )
-
 end
 
-updateScale()
+local function playAnimation(id)
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
 
-if workspace.CurrentCamera then
+    id = tostring(id):match("%d+")
+    if not id then return end
 
-    workspace.CurrentCamera:
-        GetPropertyChangedSignal(
-            "ViewportSize"
-        ):
-        Connect(updateScale)
+    stop()
 
-end
+    local anim = Instance.new("Animation")
+    anim.AnimationId = "rbxassetid://"..id
 
---============================================================
--- HEADER
---============================================================
-
-local Header =
-    create(
-        "Frame",
-        {
-            Size =
-                UDim2.new(
-                    1,
-                    0,
-                    0,
-                    54
-                ),
-
-            BackgroundTransparency = 1,
-
-            Active = true,
-
-            ZIndex = 11
-        },
-        Main
-    )
-
-local HeaderLogo =
-    create(
-        "ImageLabel",
-        {
-            Size =
-                UDim2.fromOffset(
-                    30,
-                    30
-                ),
-
-            Position =
-                UDim2.fromOffset(
-                    18,
-                    12
-                ),
-
-            BackgroundTransparency = 1,
-
-            Image =
-                "rbxthumb://type=Asset&id=6379534047&w=150&h=150",
-
-            ZIndex = 12
-        },
-        Header
-    )
-
-rounded(HeaderLogo, 30)
-
-local Title =
-    create(
-        "TextLabel",
-        {
-            Size =
-                UDim2.fromOffset(
-                    230,
-                    30
-                ),
-
-            Position =
-                UDim2.fromOffset(
-                    58,
-                    7
-                ),
-
-            BackgroundTransparency = 1,
-
-            Text = "SAIKI EMOTES",
-
-            Font =
-                Enum.Font.GothamBold,
-
-            TextSize = 18,
-
-            TextColor3 =
-                Color3.fromRGB(
-                    60,
-                    50,
-                    70
-                ),
-
-            TextXAlignment =
-                Enum.TextXAlignment.Left,
-
-            ZIndex = 12
-        },
-        Header
-    )
-
-local Subtitle =
-    create(
-        "TextLabel",
-        {
-            Size =
-                UDim2.fromOffset(
-                    230,
-                    18
-                ),
-
-            Position =
-                UDim2.fromOffset(
-                    59,
-                    29
-                ),
-
-            BackgroundTransparency = 1,
-
-            Text =
-                "EMOTES • SAIKI EDITION",
-
-            Font =
-                Enum.Font.Gotham,
-
-            TextSize = 7,
-
-            TextColor3 =
-                Color3.fromRGB(
-                    120,
-                    105,
-                    130
-                ),
-
-            TextXAlignment =
-                Enum.TextXAlignment.Left,
-
-            ZIndex = 12
-        },
-        Header
-    )
-
---============================================================
--- SHARED ANCHOR BUTTON
---============================================================
-
-local AnchorButton =
-    create(
-        "TextButton",
-        {
-            Name = "AnchorButton",
-
-            Size =
-                UDim2.fromOffset(
-                    30,
-                    30
-                ),
-
-            Position =
-                UDim2.new(
-                    1,
-                    -75,
-                    0,
-                    12
-                ),
-
-            BackgroundColor3 =
-                Color3.fromRGB(
-                    255,
-                    255,
-                    255
-                ),
-
-            BackgroundTransparency = 0.30,
-
-            BorderSizePixel = 0,
-
-            Text = "🔓",
-
-            TextSize = 15,
-
-            Font =
-                Enum.Font.GothamBold,
-
-            AutoButtonColor = false,
-
-            ZIndex = 20
-        },
-        Header
-    )
-
-rounded(AnchorButton, 15)
-
-create(
-    "UIStroke",
-    {
-        Thickness = 1,
-
-        Transparency = 0.35,
-
-        Color =
-            Color3.fromRGB(
-                190,
-                155,
-                190
-            )
-    },
-    AnchorButton
-)
-
---============================================================
--- THEME BUTTON
---============================================================
-
-local ThemeButton =
-    create(
-        "TextButton",
-        {
-            Name = "ThemeButton",
-
-            Size =
-                UDim2.fromOffset(
-                    30,
-                    30
-                ),
-
-            Position =
-                UDim2.new(
-                    1,
-                    -111,
-                    0,
-                    12
-                ),
-
-            BackgroundColor3 =
-                Color3.fromRGB(
-                    255,
-                    255,
-                    255
-                ),
-
-            BackgroundTransparency = 0.30,
-
-            BorderSizePixel = 0,
-
-            Text = "🌙",
-
-            TextSize = 15,
-
-            Font =
-                Enum.Font.GothamBold,
-
-            AutoButtonColor = false,
-
-            ZIndex = 20
-        },
-        Header
-    )
-
-rounded(ThemeButton, 15)
-
---============================================================
--- CLOSE BUTTON
---============================================================
-
-local CloseButton =
-    create(
-        "TextButton",
-        {
-            Name = "CloseButton",
-
-            Size =
-                UDim2.fromOffset(
-                    30,
-                    30
-                ),
-
-            Position =
-                UDim2.new(
-                    1,
-                    -38,
-                    0,
-                    12
-                ),
-
-            BackgroundColor3 =
-                Color3.fromRGB(
-                    255,
-                    255,
-                    255
-                ),
-
-            BackgroundTransparency = 0.30,
-
-            BorderSizePixel = 0,
-
-            Text = "×",
-
-            TextSize = 20,
-
-            Font =
-                Enum.Font.GothamBold,
-
-            TextColor3 =
-                Color3.fromRGB(
-                    90,
-                    70,
-                    95
-                ),
-
-            AutoButtonColor = false,
-
-            ZIndex = 20
-        },
-        Header
-    )
-
-rounded(CloseButton, 15)
-
---============================================================
--- SINGLE CIRCULAR HIDE BUTTON
---============================================================
-
-local HideButton =
-    create(
-        "ImageButton",
-        {
-            Name = "SaikiHideButton",
-
-            Size =
-                UDim2.fromOffset(
-                    46,
-                    46
-                ),
-
-            Position =
-                UDim2.new(
-                    0,
-                    16,
-                    0.5,
-                    -23
-                ),
-
-            BackgroundColor3 =
-                Color3.fromRGB(
-                    255,
-                    235,
-                    245
-                ),
-
-            BackgroundTransparency = 0.05,
-
-            BorderSizePixel = 0,
-
-            Image =
-                HideButtonImage,
-
-            ScaleType =
-                Enum.ScaleType.Crop,
-
-            AutoButtonColor = false,
-
-            Active = true,
-
-            ZIndex = 100
-        },
-        ScreenGui
-    )
-
--- Perfect circle
-rounded(
-    HideButton,
-    100
-)
-
-local HideStroke =
-    create(
-        "UIStroke",
-        {
-            Thickness = 1.5,
-
-            Transparency = 0.10,
-
-            Color =
-                Color3.fromRGB(
-                    210,
-                    170,
-                    195
-                )
-        },
-        HideButton
-    )
-
---============================================================
--- SHARED DRAGGING SYSTEM
---============================================================
-
-local function makeDraggable(
-    object,
-    handle,
-    canDrag
-)
-
-    local dragging = false
-
-    local dragStart
-
-    local startPosition
-
-    local dragInput
-
-    handle.InputBegan:
-        Connect(function(input)
-
-            if not canDrag() then
-                return
-            end
-
-            if
-                input.UserInputType ==
-                    Enum.UserInputType.MouseButton1
-                or
-                input.UserInputType ==
-                    Enum.UserInputType.Touch
-            then
-
-                dragging = true
-
-                dragStart =
-                    input.Position
-
-                startPosition =
-                    object.Position
-
-                input.Changed:
-                    Connect(function()
-
-                        if
-                            input.UserInputState ==
-                                Enum.UserInputState.End
-                        then
-
-                            dragging = false
-
-                        end
-
-                    end)
-
-            end
-
-        end)
-
-    handle.InputChanged:
-        Connect(function(input)
-
-            if
-                input.UserInputType ==
-                    Enum.UserInputType.MouseMovement
-                or
-                input.UserInputType ==
-                    Enum.UserInputType.Touch
-            then
-
-                dragInput = input
-
-            end
-
-        end)
-
-    UserInputService.InputChanged:
-        Connect(function(input)
-
-            if
-                input == dragInput
-                and dragging
-                and canDrag()
-            then
-
-                local delta =
-                    input.Position -
-                    dragStart
-
-                object.Position =
-                    UDim2.new(
-
-                        startPosition.X.Scale,
-
-                        startPosition.X.Offset +
-                            delta.X,
-
-                        startPosition.Y.Scale,
-
-                        startPosition.Y.Offset +
-                            delta.Y
-
-                    )
-
-            end
-
-        end)
-
-end
-
---============================================================
--- IMPORTANT:
--- ONE ANCHOR CONTROLS BOTH OBJECTS
---============================================================
-
-local function canDrag()
-
-    return not State.Anchored
-
-end
-
-makeDraggable(
-    Main,
-    Header,
-    canDrag
-)
-
-makeDraggable(
-    HideButton,
-    HideButton,
-    canDrag
-)
-
---============================================================
--- ANCHOR TOGGLE
---============================================================
-
-local function updateAnchor()
-
-    if State.Anchored then
-
-        AnchorButton.Text = "🔒"
-
-        -- Lock both GUI and hide button
-        Main.Active = false
-        HideButton.Active = false
-
-        -- But keep buttons clickable
-        AnchorButton.Active = true
-        ThemeButton.Active = true
-        CloseButton.Active = true
-
-    else
-
-        AnchorButton.Text = "🔓"
-
-        Main.Active = true
-        HideButton.Active = true
-
-    end
-
-end
-
-AnchorButton.Activated:
-    Connect(function()
-
-        State.Anchored =
-            not State.Anchored
-
-        updateAnchor()
-
+    local ok,track = pcall(function()
+        return humanoid:LoadAnimation(anim)
     end)
-
---============================================================
--- HIDE / SHOW
---============================================================
-
-HideButton.Activated:
-    Connect(function()
-
-        State.Hidden =
-            not State.Hidden
-
-        Main.Visible =
-            not State.Hidden
-
-    end)
-
---============================================================
--- CLOSE
---============================================================
-
-CloseButton.Activated:
-    Connect(function()
-
-        Main.Visible = false
-
-        State.Hidden = true
-
-    end)
-
---============================================================
--- THEME
---============================================================
-
-ThemeButton.Activated:
-    Connect(function()
-
-        if State.Theme == "Light" then
-
-            State.Theme = "Dark"
-
-            Main.BackgroundColor3 =
-                Color3.fromRGB(
-                    22,
-                    18,
-                    27
-                )
-
-            Gradient.Color =
-                ColorSequence.new({
-
-                    ColorSequenceKeypoint.new(
-                        0,
-                        Color3.fromRGB(
-                            48,
-                            25,
-                            40
-                        )
-                    ),
-
-                    ColorSequenceKeypoint.new(
-                        0.5,
-                        Color3.fromRGB(
-                            30,
-                            25,
-                            45
-                        )
-                    ),
-
-                    ColorSequenceKeypoint.new(
-                        1,
-                        Color3.fromRGB(
-                            20,
-                            38,
-                            35
-                        )
-                    )
-
-                })
-
-            ThemeButton.Text = "☀"
-
-        else
-
-            State.Theme = "Light"
-
-            Main.BackgroundColor3 =
-                Color3.fromRGB(
-                    248,
-                    245,
-                    255
-                )
-
-            Gradient.Color =
-                ColorSequence.new({
-
-                    ColorSequenceKeypoint.new(
-                        0,
-                        Color3.fromRGB(
-                            255,
-                            226,
-                            241
-                        )
-                    ),
-
-                    ColorSequenceKeypoint.new(
-                        0.48,
-                        Color3.fromRGB(
-                            235,
-                            226,
-                            255
-                        )
-                    ),
-
-                    ColorSequenceKeypoint.new(
-                        1,
-                        Color3.fromRGB(
-                            213,
-                            247,
-                            241
-                        )
-                    )
-
-                })
-
-            ThemeButton.Text = "🌙"
-
-        end
-
-    end)
-
---============================================================
--- ANIMATION SYSTEM
---============================================================
-
-local function stopEmote()
-
-    if State.CurrentTrack then
-
-        pcall(function()
-
-            State.CurrentTrack:
-                Stop(0.15)
-
-        end)
-
-        State.CurrentTrack = nil
-
-    end
-
-end
-
-local function playEmote(id)
-
-    id = tonumber(id)
-
-    if not id then
-        return
-    end
-
-    local character =
-        LocalPlayer.Character
-
-    if not character then
-        return
-    end
-
-    local humanoid =
-        character:
-            FindFirstChildOfClass(
-                "Humanoid"
-            )
-
-    if not humanoid then
-        return
-    end
-
-    stopEmote()
-
-    local animation =
-        Instance.new(
-            "Animation"
-        )
-
-    animation.AnimationId =
-        "rbxassetid://" ..
-        tostring(id)
-
-    local ok, track =
-        pcall(function()
-
-            return humanoid:
-                LoadAnimation(
-                    animation
-                )
-
-        end)
-
-    animation:Destroy()
 
     if not ok or not track then
+        anim:Destroy()
         return
     end
 
-    pcall(function()
+    track.Priority = Enum.AnimationPriority.Action
+    track.Looped = true
 
-        track.Priority =
-            Enum.AnimationPriority.Action4
-
-        track.Looped = true
-
-        track:Play(
-            0.1,
-            1,
-            State.Speed
-        )
-
-    end)
-
-    State.CurrentTrack =
-        track
-
+    if pcall(function() track:Play(0.1,1,State.Speed) end) then
+        State.Track = track
+    else
+        pcall(function() track:Destroy() end)
+    end
 end
 
---============================================================
--- MOVEMENT STOP
---============================================================
-
-RunService.RenderStepped:
-    Connect(function()
-
-        if not State.StopWhenMoving then
-            return
+local function filtered()
+    local result = {}
+    local q = string.lower(Search.Text or "")
+    for _,e in ipairs(Emotes) do
+        if q == "" or string.find(string.lower(e.name),q,1,true) then
+            table.insert(result,e)
         end
+    end
+    return result
+end
 
-        local track =
-            State.CurrentTrack
+local function getCard(i)
+    if Cards[i] then return Cards[i] end
 
-        if not track then
-            return
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1,0,0,64)
+    card.BackgroundColor3 = C().Button
+    card.BackgroundTransparency = 0.10
+    card.BorderSizePixel = 0
+    card.Parent = List
+    makeCorner(card,10)
+
+    local image = Instance.new("ImageLabel")
+    image.Name = "Image"
+    image.Size = UDim2.fromOffset(50,50)
+    image.Position = UDim2.fromOffset(6,7)
+    image.BackgroundTransparency = 1
+    image.Parent = card
+    makeCorner(image,8)
+
+    local name = Instance.new("TextLabel")
+    name.Name = "Name"
+    name.Size = UDim2.new(1,-132,0,26)
+    name.Position = UDim2.fromOffset(64,7)
+    name.BackgroundTransparency = 1
+    name.TextColor3 = C().Text
+    name.TextSize = 11
+    name.Font = Enum.Font.GothamBold
+    name.TextXAlignment = Enum.TextXAlignment.Left
+    name.TextTruncate = Enum.TextTruncate.AtEnd
+    name.Parent = card
+
+    local p = button(card,"PLAY",UDim2.new(1,-61,0.5,-15),UDim2.fromOffset(54,30))
+    p.Name = "Play"
+
+    Cards[i] = card
+    return card
+end
+
+local function redraw()
+    local list = filtered()
+    local total = math.max(1,math.ceil(#list/State.PageSize))
+    State.Page = math.clamp(State.Page,1,total)
+
+    local first = (State.Page-1)*State.PageSize+1
+
+    for i=1,State.PageSize do
+        local card = getCard(i)
+        local e = list[first+i-1]
+
+        card.Visible = e ~= nil
+        if e then
+            card.Image = nil
+            local img = card:FindFirstChild("Image")
+            local name = card:FindFirstChild("Name")
+            local p = card:FindFirstChild("Play")
+
+            img.Image = "rbxthumb://type=Asset&id="..e.id.."&w=150&h=150"
+            name.Text = e.name
+
+            -- Avoid creating repeated click connections.
+            if p:GetAttribute("Bound") ~= true then
+                p:SetAttribute("Bound",true)
+                p.MouseButton1Click:Connect(function()
+                    local currentName = name.Text
+                    for _,x in ipairs(Emotes) do
+                        if x.name == currentName then
+                            State.Selected = x
+                            PTitle.Text = x.name
+                            PSub.Text = "Animation ID: "..x.id
+                            Cover.Image = "rbxthumb://type=Asset&id="..x.id.."&w=300&h=300"
+                            playAnimation(x.id)
+                            break
+                        end
+                    end
+                end)
+            end
         end
+    end
 
-        if not track.IsPlaying then
-            return
-        end
+    PageLabel.Text = "Page "..State.Page.." / "..total
+end
 
-        local character =
-            LocalPlayer.Character
+Search:GetPropertyChangedSignal("Text"):Connect(function()
+    State.Page = 1
+    redraw()
+end)
 
-        if not character then
-            return
-        end
+Prev.MouseButton1Click:Connect(function()
+    if State.Page > 1 then
+        State.Page -= 1
+        redraw()
+    end
+end)
 
-        local humanoid =
-            character:
-                FindFirstChildOfClass(
-                    "Humanoid"
-                )
+Next.MouseButton1Click:Connect(function()
+    local total = math.max(1,math.ceil(#filtered()/State.PageSize))
+    if State.Page < total then
+        State.Page += 1
+        redraw()
+    end
+end)
 
-        if not humanoid then
-            return
-        end
+Play.MouseButton1Click:Connect(function()
+    if State.Selected then playAnimation(State.Selected.id) end
+end)
 
-        if
-            humanoid.MoveDirection.Magnitude
-                > 0.05
-        then
+Stop.MouseButton1Click:Connect(stop)
 
-            stopEmote()
+Speed.FocusLost:Connect(function()
+    local n = tonumber(Speed.Text)
+    if not n then
+        Speed.Text = tostring(State.Speed)
+        return
+    end
+    State.Speed = math.clamp(n,0.05,5)
+    Speed.Text = tostring(State.Speed)
+    if State.Track then pcall(function() State.Track:AdjustSpeed(State.Speed) end) end
+end)
 
-        end
+MoveButton.MouseButton1Click:Connect(function()
+    State.StopOnMove = not State.StopOnMove
+    MoveButton.Text = State.StopOnMove and "Stop on move: ON" or "Stop on move: OFF"
+end)
 
-    end)
+HideButton.MouseButton1Click:Connect(function()
+    State.Hidden = not State.Hidden
+    Main.Visible = not State.Hidden
+end)
 
---============================================================
--- RESPAWN SAFETY
---============================================================
+AnchorButton.MouseButton1Click:Connect(function()
+    State.Anchored = not State.Anchored
+    AnchorButton.Text = State.Anchored and "🔒" or "🔓"
+end)
 
-LocalPlayer.CharacterAdded:
-    Connect(function()
+ThemeButton.MouseButton1Click:Connect(function()
+    State.Dark = not State.Dark
+    local c = C()
 
-        State.CurrentTrack = nil
+    Main.BackgroundColor3 = c.Main
+    Title.TextColor3 = c.Text
+    Subtitle.TextColor3 = c.Sub
+    Search.BackgroundColor3 = c.Card
+    Search.TextColor3 = c.Text
+    Search.PlaceholderColor3 = c.Sub
+    List.BackgroundColor3 = c.Card
+    Panel.BackgroundColor3 = c.Card
+    PTitle.TextColor3 = c.Text
+    PSub.TextColor3 = c.Sub
+    SpeedLabel.TextColor3 = c.Text
+    Speed.BackgroundColor3 = c.Button
+    Speed.TextColor3 = c.Text
+    PageLabel.TextColor3 = c.Sub
 
-    end)
+    for _,b in ipairs({AnchorButton,ThemeButton,CloseButton,Prev,Next,Play,Stop,MoveButton}) do
+        b.BackgroundColor3 = c.Button
+        b.TextColor3 = c.Text
+    end
 
---============================================================
--- KEYBOARD G
---============================================================
+    for _,card in pairs(Cards) do
+        card.BackgroundColor3 = c.Button
+        local n = card:FindFirstChild("Name")
+        if n then n.TextColor3 = c.Text end
+        local p = card:FindFirstChild("Play")
+        if p then p.BackgroundColor3 = c.Button; p.TextColor3 = c.Text end
+    end
 
-UserInputService.InputBegan:
-    Connect(function(
-        input,
-        processed
-    )
+    ThemeButton.Text = State.Dark and "☀" or "☾"
+end)
 
-        if processed then
-            return
-        end
+CloseButton.MouseButton1Click:Connect(function()
+    stop()
+    pcall(function() Gui:Destroy() end)
+    pcall(function() HideGui:Destroy() end)
+end)
 
-        if
-            input.KeyCode ==
-                Enum.KeyCode.G
-        then
+RunService.RenderStepped:Connect(function()
+    if not State.StopOnMove or not State.Track then return end
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid and (
+        humanoid.MoveDirection.Magnitude > 0.05
+        or humanoid:GetState() == Enum.HumanoidStateType.Jumping
+        or humanoid:GetState() == Enum.HumanoidStateType.Freefall
+    ) then
+        stop()
+    end
+end)
 
-            State.Hidden =
-                not State.Hidden
+LocalPlayer.CharacterAdded:Connect(stop)
 
-            Main.Visible =
-                not State.Hidden
+-- Keyboard G toggles the same main GUI.
+UserInputService.InputBegan:Connect(function(input,processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.G then
+        State.Hidden = not State.Hidden
+        Main.Visible = not State.Hidden
+    end
+end)
 
-        end
-
-    end)
-
---============================================================
--- INITIAL
---============================================================
-
-updateAnchor()
-
-print(
-    "[Saiki Emotes] Loaded successfully."
-)
-```
+redraw()
+print("[Saiki Emotes] Loaded successfully.")
