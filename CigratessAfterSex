@@ -112,7 +112,7 @@ local Main = Instance.new("Frame")
 Main.Size = UDim2.fromOffset(620,420)
 Main.Position = UDim2.new(0.5,-310,0.5,-210)
 Main.BackgroundColor3 = C().Main
-Main.BackgroundTransparency = 0.03
+Main.BackgroundTransparency = 0
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Parent = Gui
@@ -251,18 +251,53 @@ hs.Parent = HideButton
 draggable(HideButton,HideButton)
 
 -- Load the requested GitHub image.
+-- Roblox ImageLabels cannot directly display a normal GitHub URL, so the
+-- executor downloads the file first and then converts it to a local asset.
 task.spawn(function()
-    if not HttpRequest or not GetCustomAsset or not writefile then return end
+    if not HttpRequest or not GetCustomAsset or not writefile then
+        warn("[Saiki Emotes] Executor does not provide HTTP/local-asset functions; hide image cannot be downloaded.")
+        return
+    end
+
     local url = "https://raw.githubusercontent.com/SaikiWithTheBanHammer/ScriptBlox/main/AuraFarmerSaiki.jpg"
-    local ok,res = pcall(function()
-        return HttpRequest({Url=url,Method="GET"})
+    local file = "Saiki_AuraFarmer_Hide.jpg"
+
+    local ok, response = pcall(function()
+        return HttpRequest({
+            Url = url,
+            Method = "GET"
+        })
     end)
-    if ok and res and res.Body and #res.Body > 0 then
-        local file = "Saiki_AuraFarmer_Hide.jpg"
-        if pcall(function() writefile(file,res.Body) end) then
-            local asset = pcall(function() return GetCustomAsset(file) end)
-            if asset then HideButton.Image = asset end
-        end
+
+    if not ok or not response then
+        warn("[Saiki Emotes] GitHub image request failed.")
+        return
+    end
+
+    local body = response.Body
+    if type(body) ~= "string" or #body < 100 then
+        warn("[Saiki Emotes] GitHub returned an empty/invalid image.")
+        return
+    end
+
+    local wrote = pcall(function()
+        writefile(file, body)
+    end)
+
+    if not wrote then
+        warn("[Saiki Emotes] Could not save the GitHub image locally.")
+        return
+    end
+
+    local assetOK, asset = pcall(function()
+        return GetCustomAsset(file)
+    end)
+
+    if assetOK and asset then
+        HideButton.Image = asset
+        print("[Saiki Emotes] GitHub hide image loaded.")
+    else
+        warn("[Saiki Emotes] Could not convert the downloaded image to a Roblox asset.")
     end
 end)
 
@@ -508,7 +543,6 @@ local function redraw()
 
         card.Visible = e ~= nil
         if e then
-            card.Image = nil
             local img = card:FindFirstChild("Image")
             local name = card:FindFirstChild("Name")
             local p = card:FindFirstChild("Play")
