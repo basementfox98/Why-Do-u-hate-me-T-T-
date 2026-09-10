@@ -25,7 +25,7 @@ local function req(url, method, body)
     if res.Body and res.Body ~= "" and res.Body ~= "null" then
         pcall(function() data = HttpService:JSONDecode(res.Body) end)
     end
-    return res.Success == true, data
+    return (res.Success == true) or (tonumber(res.StatusCode) and tonumber(res.StatusCode) >= 200 and tonumber(res.StatusCode) < 300), data
 end
 
 local function get(url)
@@ -150,10 +150,25 @@ removeBtn.BackgroundColor3=Color3.fromRGB(220,65,75); removeBtn.Text="Remove TOP
 removeBtn.Font=Enum.Font.GothamBold; removeBtn.TextSize=11; removeBtn.TextColor3=Color3.new(1,1,1)
 removeBtn.BorderSizePixel=0; Instance.new("UICorner",removeBtn).CornerRadius=UDim.new(0,8)
 
+local customBox=Instance.new("TextBox",main)
+customBox.Size=UDim2.fromOffset(205,30); customBox.Position=UDim2.fromOffset(12,317)
+customBox.BackgroundColor3=Color3.fromRGB(255,255,255); customBox.BorderSizePixel=0
+customBox.PlaceholderText="Custom follower username"; customBox.Text=""
+customBox.Font=Enum.Font.Gotham; customBox.TextSize=11; customBox.TextColor3=Color3.fromRGB(40,40,45)
+customBox.ClearTextOnFocus=false
+Instance.new("UICorner",customBox).CornerRadius=UDim.new(0,8)
+Instance.new("UIStroke",customBox).Color=Color3.fromRGB(220,220,224)
+
+local customBtn=Instance.new("TextButton",main)
+customBtn.Size=UDim2.fromOffset(119,30); customBtn.Position=UDim2.fromOffset(229,317)
+customBtn.BackgroundColor3=Color3.fromRGB(75,125,215); customBtn.Text="Send Custom Follow"
+customBtn.Font=Enum.Font.GothamBold; customBtn.TextSize=10; customBtn.TextColor3=Color3.new(1,1,1)
+customBtn.BorderSizePixel=0; Instance.new("UICorner",customBtn).CornerRadius=UDim.new(0,8)
+
 local status=Instance.new("TextLabel",main)
-status.Size=UDim2.new(1,-24,0,65); status.Position=UDim2.fromOffset(12,322)
+status.Size=UDim2.new(1,-24,0,55); status.Position=UDim2.fromOffset(12,354)
 status.BackgroundTransparency=1
-status.Text="Select a player from TOP.\nSet/Add TOP adds TOP-listed IDs until the target count is reached."
+status.Text="Select a player from TOP.\nSet Count changes real follower records; custom follow adds the typed username as a follower."
 status.Font=Enum.Font.Gotham; status.TextSize=11; status.TextColor3=Color3.fromRGB(90,90,95)
 status.TextWrapped=true; status.TextXAlignment=Enum.TextXAlignment.Left
 status.TextYAlignment=Enum.TextYAlignment.Top
@@ -241,6 +256,41 @@ local function setFollowerCount()
     end
 end
 
+local function sendCustomFollow()
+    if busy then return end
+    if not current then setStatus("Select a player first."); return end
+
+    local username=customBox.Text:gsub("^%s+",""):gsub("%s+$","")
+    if username=="" then setStatus("Enter a custom follower username."); return end
+    if #username>80 then setStatus("Username is too long (max 80 characters)."); return end
+    if username==tostring(current.name) then
+        setStatus("The selected player cannot follow themselves."); return
+    end
+
+    busy=true
+    local targetKey=tostring(current.uid)
+    local followerKey=esc(username)
+    local existing=get(FOLLOWERS.."/"..esc(targetKey).."/"..followerKey..".json")
+
+    if existing~=nil then
+        busy=false
+        setStatus(string.format("Custom follower already exists: %s",username))
+        return
+    end
+
+    setStatus(string.format("Adding custom follower %s to %s...",username,current.name))
+    local ok=put(FOLLOWERS.."/"..esc(targetKey).."/"..followerKey..".json",true)
+    busy=false
+    render()
+
+    if ok then
+        customBox.Text=""
+        setStatus(string.format("Done. %s was added as a follower of %s.",username,current.name))
+    else
+        setStatus("Failed to write the custom follower record. Check Firebase rules / HTTP access.")
+    end
+end
+
 local function removeTopFollowers()
     if busy then return end
     if not current then setStatus("Select a player first."); return end
@@ -276,6 +326,10 @@ end)
 
 addBtn.MouseButton1Click:Connect(function() task.spawn(setFollowerCount) end)
 removeBtn.MouseButton1Click:Connect(function() task.spawn(removeTopFollowers) end)
+customBtn.MouseButton1Click:Connect(function() task.spawn(sendCustomFollow) end)
+customBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then task.spawn(sendCustomFollow) end
+end)
 
 -- Hide/unhide: the small floating button remains available when the main panel is hidden.
 local mini=Instance.new("TextButton",gui)
