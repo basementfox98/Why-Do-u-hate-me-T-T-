@@ -12,6 +12,16 @@ local AvatarEditorService = game:GetService("AvatarEditorService")
 local CoreGui = game:GetService("CoreGui")
 local Lighting = game:GetService("Lighting")
 
+-- Use the executor UI container when available; otherwise fall back safely.
+local UIParent = nil
+pcall(function()
+    if type(gethui) == "function" then UIParent = gethui() end
+end)
+if not UIParent then UIParent = CoreGui end
+if not UIParent then
+    UIParent = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+end
+
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then return end
 
@@ -109,7 +119,7 @@ Gui.Name = "SAIKI_EMOTES_GUI"
 Gui.ResetOnSpawn = false
 Gui.IgnoreGuiInset = true
 Gui.DisplayOrder = 50
-Gui.Parent = CoreGui
+Gui.Parent = UIParent
 
 local Main = Instance.new("Frame")
 Main.Size = UDim2.fromOffset(620,420)
@@ -238,7 +248,7 @@ HideGui.Name = "SAIKI_EMOTES_HIDE"
 HideGui.ResetOnSpawn = false
 HideGui.IgnoreGuiInset = true
 HideGui.DisplayOrder = 51
-HideGui.Parent = CoreGui
+HideGui.Parent = UIParent
 
 local HideButton = Instance.new("ImageButton")
 HideButton.Size = UDim2.fromOffset(46,46)
@@ -640,10 +650,7 @@ local function getCatalogPage(keyword)
     if not ok or not params then return nil end
 
     local callOk,result = pcall(function()
-        if AvatarEditorService.SearchCatalogAsync then
-            return AvatarEditorService:SearchCatalogAsync(params)
-        end
-        return AvatarEditorService:SearchCatalog(params)
+        return AvatarEditorService:SearchCatalogAsync(params)
     end)
     if not callOk then
         callOk,result = pcall(function()
@@ -1017,4 +1024,4 @@ RunService.RenderStepped:Connect(function(dt)
     end
 end)
 
-print("[Saiki Emotes] Loaded successfully.")
+print("[Saiki Emotes] Loaded successfully. UI parent: " .. tostring(UIParent))
