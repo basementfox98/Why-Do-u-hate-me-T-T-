@@ -284,7 +284,7 @@ local Gui = create("ScreenGui", {
     Name = "SAIKI_EMOTES_GUI",
     ResetOnSpawn = false,
     IgnoreGuiInset = true,
-    DisplayOrder = 50,
+    DisplayOrder = 60,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 }, UIParent)
 
@@ -324,13 +324,22 @@ pcall(function()
 end)
 
 -- Ambient layer goes behind all content.
+local AmbientGui = create("ScreenGui", {
+    Name = "SAIKI_EMOTES_AMBIENT",
+    ResetOnSpawn = false,
+    IgnoreGuiInset = true,
+    DisplayOrder = 40,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+}, UIParent)
+
 local AmbientLayer = create("Frame", {
     Name = "Ambient",
     Size = UDim2.fromScale(1,1),
+    Position = UDim2.fromScale(0,0),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
-    ZIndex = 0,
-}, Main)
+    ZIndex = 1,
+}, AmbientGui)
 
 -- Header
 local Header = create("Frame", {
@@ -508,7 +517,7 @@ local Search = create("TextBox", {
     Position = UDim2.fromOffset(0,0),
     BackgroundColor3 = Color3.fromRGB(255,255,255),
     BorderSizePixel = 0,
-    PlaceholderText = "Search emotes...",
+    PlaceholderText = "    Search emotes...",
     Text = "",
     ClearTextOnFocus = false,
     TextColor3 = Color3.fromRGB(55,47,65),
@@ -519,6 +528,18 @@ local Search = create("TextBox", {
 }, CatalogFrame)
 corner(Search,9)
 stroke(Search,Color3.fromRGB(220,205,230),1,0.15)
+
+local SEARCH_WHITE = "rbxassetid://120477245713734"
+local SEARCH_BLACK = "rbxassetid://15118373478"
+
+local SearchIcon = create("ImageLabel", {
+    Size = UDim2.fromOffset(16,16),
+    Position = UDim2.fromOffset(8,7),
+    BackgroundTransparency = 1,
+    Image = SEARCH_BLACK,
+    ScaleType = Enum.ScaleType.Fit,
+    ZIndex = 8,
+}, CatalogFrame)
 
 local RefreshButton = makeButton(CatalogFrame,"↻",UDim2.new(1,-182,0,0),UDim2.fromOffset(42,29))
 local SortButton = makeButton(CatalogFrame,"Sort",UDim2.new(1,-134,0,0),UDim2.fromOffset(62,29))
@@ -601,7 +622,7 @@ local SavedSearch = create("TextBox", {
     Position = UDim2.fromOffset(0,0),
     BackgroundColor3 = Color3.fromRGB(255,255,255),
     BorderSizePixel = 0,
-    PlaceholderText = "Search saved...",
+    PlaceholderText = "    Search saved...",
     Text = "",
     ClearTextOnFocus = false,
     TextColor3 = Color3.fromRGB(55,47,65),
@@ -612,6 +633,15 @@ local SavedSearch = create("TextBox", {
 }, SavedFrame)
 corner(SavedSearch,9)
 stroke(SavedSearch,Color3.fromRGB(220,205,230),1,0.15)
+
+local SavedSearchIcon = create("ImageLabel", {
+    Size = UDim2.fromOffset(16,16),
+    Position = UDim2.fromOffset(8,7),
+    BackgroundTransparency = 1,
+    Image = SEARCH_BLACK,
+    ScaleType = Enum.ScaleType.Fit,
+    ZIndex = 8,
+}, SavedFrame)
 
 local SavedAddId = makeButton(SavedFrame,"+ ID",UDim2.new(1,-62,0,0),UDim2.fromOffset(62,29))
 
@@ -1149,17 +1179,21 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
         ZIndex = 7,
     }, card)
 
-    local play = makeButton(card,"PLAY",UDim2.fromOffset(65,43),UDim2.fromOffset(37,21))
+    local play = makeButton(card,"PLAY",UDim2.fromOffset(65,42),UDim2.fromOffset(38,23))
     play.TextSize = 8
+    play.BackgroundTransparency = 0
+    play.AutoButtonColor = true
     play.ZIndex = 8
 
     local save = makeButton(
         card,
         savedMode and "REMOVE" or (State.SavedSet[id] and "★" or "SAVE"),
-        UDim2.fromOffset(106,43),
-        UDim2.fromOffset(37,21)
+        UDim2.fromOffset(107,42),
+        UDim2.fromOffset(35,23)
     )
     save.TextSize = 7
+    save.BackgroundTransparency = 0
+    save.AutoButtonColor = true
     save.ZIndex = 8
 
     local copy = create("TextButton", {
@@ -1655,6 +1689,7 @@ end)
 
 CloseButton.MouseButton1Click:Connect(function()
     stopCurrentEmote()
+    pcall(function() AmbientGui:Destroy() end)
     pcall(function() Gui:Destroy() end)
     pcall(function()
         local hide = UIParent:FindFirstChild("SAIKI_EMOTES_HIDE")
@@ -1768,10 +1803,10 @@ local rng = Random.new()
 
 for i=1,18 do
     local obj = create("ImageLabel", {
-        Size = UDim2.fromOffset(rng:NextInteger(11,22),rng:NextInteger(11,22)),
+        Size = UDim2.fromOffset(rng:NextInteger(18,32),rng:NextInteger(18,32)),
         Position = UDim2.new(
             rng:NextNumber(0,1),0,
-            rng:NextNumber(-0.25,1),0
+            rng:NextNumber(-0.35,1),0
         ),
         BackgroundTransparency = 1,
         Image = CHERRY[((i-1)%#CHERRY)+1],
@@ -1798,16 +1833,47 @@ RunService.RenderStepped:Connect(function(dt)
 
     local hue = (State.GradientTime * 0.035) % 1
 
-    if State.Dark then
-        Main.BackgroundColor3 = Color3.fromRGB(18,15,22)
+    -- Moving looped gradient in BOTH light and dark themes.
+    Gradient.Offset = Vector2.new(math.sin(State.GradientTime * 0.7) * 0.38, 0)
+
+    local dark = State.Dark
+
+    if dark then
+        Main.BackgroundColor3 = Color3.fromRGB(20,17,24)
         Gradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,Color3.fromHSV((hue+.78)%1,.50,.16)),
-            ColorSequenceKeypoint.new(.5,Color3.fromHSV((hue+.68)%1,.42,.12)),
-            ColorSequenceKeypoint.new(1,Color3.fromHSV((hue+.92)%1,.48,.16)),
+            ColorSequenceKeypoint.new(0,Color3.fromRGB(76,34,82)),
+            ColorSequenceKeypoint.new(0.5,Color3.fromRGB(35,24,58)),
+            ColorSequenceKeypoint.new(1,Color3.fromRGB(28,64,56)),
         })
-        MainStroke.Color = Color3.fromRGB(150,108,157)
+        MainStroke.Color = Color3.fromRGB(145,105,155)
         Title.TextColor3 = Color3.fromRGB(245,235,248)
         Subtitle.TextColor3 = Color3.fromRGB(175,160,180)
+
+        Search.BackgroundColor3 = Color3.fromRGB(31,27,36)
+        Search.TextColor3 = Color3.fromRGB(240,235,245)
+        Search.PlaceholderColor3 = Color3.fromRGB(145,135,155)
+        SearchIcon.Image = SEARCH_WHITE
+
+        SavedSearch.BackgroundColor3 = Color3.fromRGB(31,27,36)
+        SavedSearch.TextColor3 = Color3.fromRGB(240,235,245)
+        SavedSearch.PlaceholderColor3 = Color3.fromRGB(145,135,155)
+        SavedSearchIcon.Image = SEARCH_WHITE
+
+        List.BackgroundColor3 = Color3.fromRGB(27,24,31)
+        SavedList.BackgroundColor3 = Color3.fromRGB(27,24,31)
+        PageBox.BackgroundColor3 = Color3.fromRGB(31,27,36)
+        PageBox.TextColor3 = Color3.fromRGB(240,235,245)
+
+        -- Every normal button becomes a dark rounded control.
+        for _,obj in ipairs(Main:GetDescendants()) do
+            if obj:IsA("TextButton") then
+                obj.BackgroundColor3 = Color3.fromRGB(40,34,45)
+                obj.TextColor3 = Color3.fromRGB(240,230,245)
+            elseif obj:IsA("TextBox") then
+                obj.BackgroundColor3 = Color3.fromRGB(31,27,36)
+                obj.TextColor3 = Color3.fromRGB(240,235,245)
+            end
+        end
     else
         Main.BackgroundColor3 = Color3.fromRGB(255,255,255)
         Gradient.Color = ColorSequence.new({
@@ -1818,6 +1884,64 @@ RunService.RenderStepped:Connect(function(dt)
         MainStroke.Color = Color3.fromRGB(220,205,230)
         Title.TextColor3 = Color3.fromRGB(53,49,67)
         Subtitle.TextColor3 = Color3.fromRGB(116,108,130)
+
+        Search.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        Search.TextColor3 = Color3.fromRGB(55,47,65)
+        Search.PlaceholderColor3 = Color3.fromRGB(130,120,140)
+        SearchIcon.Image = SEARCH_BLACK
+
+        SavedSearch.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        SavedSearch.TextColor3 = Color3.fromRGB(55,47,65)
+        SavedSearch.PlaceholderColor3 = Color3.fromRGB(130,120,140)
+        SavedSearchIcon.Image = SEARCH_BLACK
+
+        List.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        SavedList.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        PageBox.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        PageBox.TextColor3 = Color3.fromRGB(80,70,90)
+
+        for _,obj in ipairs(Main:GetDescendants()) do
+            if obj:IsA("TextButton") then
+                obj.BackgroundColor3 = Color3.fromRGB(255,248,253)
+                obj.TextColor3 = Color3.fromRGB(55,47,65)
+            elseif obj:IsA("TextBox") then
+                obj.BackgroundColor3 = Color3.fromRGB(255,255,255)
+                obj.TextColor3 = Color3.fromRGB(55,47,65)
+            end
+        end
+    end
+
+    -- Re-theme rendered cards without recreating them every frame.
+    local cardColor = dark and Color3.fromRGB(36,31,40) or Color3.fromRGB(251,248,253)
+    local buttonColor = dark and Color3.fromRGB(48,40,53) or Color3.fromRGB(255,248,253)
+    local textColor = dark and Color3.fromRGB(235,225,240) or Color3.fromRGB(65,55,75)
+
+    for _,obj in ipairs(List:GetChildren()) do
+        if obj:IsA("Frame") then
+            obj.BackgroundColor3 = cardColor
+            for _,child in ipairs(obj:GetChildren()) do
+                if child:IsA("TextLabel") then
+                    child.TextColor3 = textColor
+                elseif child:IsA("TextButton") then
+                    child.BackgroundColor3 = buttonColor
+                    child.TextColor3 = dark and Color3.fromRGB(240,230,245) or Color3.fromRGB(55,47,65)
+                end
+            end
+        end
+    end
+
+    for _,obj in ipairs(SavedList:GetChildren()) do
+        if obj:IsA("Frame") then
+            obj.BackgroundColor3 = cardColor
+            for _,child in ipairs(obj:GetChildren()) do
+                if child:IsA("TextLabel") then
+                    child.TextColor3 = textColor
+                elseif child:IsA("TextButton") then
+                    child.BackgroundColor3 = buttonColor
+                    child.TextColor3 = dark and Color3.fromRGB(240,230,245) or Color3.fromRGB(55,47,65)
+                end
+            end
+        end
     end
 
     for i,data in ipairs(ambient) do
