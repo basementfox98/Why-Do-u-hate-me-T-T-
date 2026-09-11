@@ -330,7 +330,7 @@ local AmbientGui = create("ScreenGui", {
     IgnoreGuiInset = true,
     DisplayOrder = 40,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-    Enabled = false,
+    Enabled = true,
 }, UIParent)
 
 local AmbientLayer = create("Frame", {
@@ -352,13 +352,13 @@ local Header = create("Frame", {
 }, Main)
 
 local Logo = create("ImageLabel", {
-    Size = UDim2.fromOffset(38,38),
-    Position = UDim2.fromOffset(0,6),
+    Size = UDim2.fromOffset(30,30),
+    Position = UDim2.fromOffset(0,11),
     BackgroundTransparency = 1,
     Image = "rbxassetid://6379534047",
     ZIndex = 11,
 }, Header)
-corner(Logo, 19)
+corner(Logo, 15)
 
 local Title = create("TextLabel", {
     Size = UDim2.fromOffset(220,24),
@@ -383,6 +383,118 @@ local Subtitle = create("TextLabel", {
     TextXAlignment = Enum.TextXAlignment.Left,
     ZIndex = 11,
 }, Header)
+
+local SOCIAL_INSTAGRAM_IMAGE = "https://raw.githubusercontent.com/thedevilondiscord/Why-Do-u-hate-me-T-T-/main/icons8-instagram-48.png"
+local SOCIAL_DISCORD_IMAGE = "https://raw.githubusercontent.com/thedevilondiscord/Why-Do-u-hate-me-T-T-/main/dx.jpg"
+local SOCIAL_INSTAGRAM_URL = "https://www.instagram.com/saiki_hu_lol/"
+local SOCIAL_DISCORD_URL = "https://discord.gg/eWC3CSxkQM"
+
+local function socialRequest()
+    return (syn and syn.request) or (http and http.request) or http_request or request
+end
+
+local function downloadSocialAsset(url, fileName)
+    local req = socialRequest()
+    if not req or not writefile or not getcustomasset then
+        return nil
+    end
+
+    local ok, res = pcall(function()
+        return req({Url = url, Method = "GET"})
+    end)
+
+    if not ok or not res or type(res.Body) ~= "string" or #res.Body == 0 then
+        return nil
+    end
+
+    pcall(function()
+        if isfile and isfile(fileName) and delfile then
+            delfile(fileName)
+        end
+        writefile(fileName, res.Body)
+    end)
+
+    local okAsset, asset = pcall(function()
+        return getcustomasset(fileName)
+    end)
+
+    return okAsset and asset or nil
+end
+
+local function makeSocialButton(name, imageUrl, x, fileName)
+    local button = create("ImageButton", {
+        Name = name,
+        Position = UDim2.fromOffset(x, 11),
+        Size = UDim2.fromOffset(30, 30),
+        BackgroundColor3 = Color3.fromRGB(255,255,255),
+        BackgroundTransparency = 0.28,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        Image = "",
+        ScaleType = Enum.ScaleType.Fit,
+        ZIndex = 13,
+        Active = true,
+    }, Header)
+
+    corner(button, 10)
+    local socialStroke = stroke(button, Color3.fromRGB(215,180,205), 1, 0.28)
+
+    local asset = downloadSocialAsset(imageUrl, fileName)
+    if asset then
+        button.Image = asset
+    end
+
+    button.MouseEnter:Connect(function()
+        button.BackgroundTransparency = 0.08
+        socialStroke.Transparency = 0.05
+    end)
+
+    button.MouseLeave:Connect(function()
+        button.BackgroundTransparency = 0.28
+        socialStroke.Transparency = 0.28
+    end)
+
+    return button
+end
+
+-- Same header arrangement as Saiki Music: Saiki image on the left,
+-- with Instagram and Discord beside the title area.
+local InstagramButton = makeSocialButton(
+    "InstagramButton",
+    SOCIAL_INSTAGRAM_IMAGE,
+    250,
+    "saiki_instagram_icon.png"
+)
+
+local DiscordButton = makeSocialButton(
+    "DiscordButton",
+    SOCIAL_DISCORD_IMAGE,
+    286,
+    "saiki_discord_cover.jpg"
+)
+
+local function copySocialLink(url, label)
+    local fn = setclipboard or toclipboard or set_clipboard
+    local copied = false
+
+    if type(fn) == "function" then
+        copied = pcall(fn, url)
+    elseif syn and type(syn.write_clipboard) == "function" then
+        copied = pcall(syn.write_clipboard, url)
+    end
+
+    if copied and type(notify) == "function" then
+        notify("SAIKI EMOTES", "Copied " .. label .. " link")
+    end
+end
+
+InstagramButton.Activated:Connect(function()
+    copySocialLink(SOCIAL_INSTAGRAM_URL, "Instagram")
+end)
+
+DiscordButton.Activated:Connect(function()
+    copySocialLink(SOCIAL_DISCORD_URL, "Discord")
+end)
 
 local function makeButton(parent, text, position, size)
     local b = create("TextButton", {
@@ -1186,22 +1298,24 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
     local play = makeButton(
         card,
         "PLAY",
-        UDim2.fromOffset(63,44),
-        UDim2.fromOffset(40,22)
+        UDim2.fromOffset(61,43),
+        UDim2.fromOffset(43,23)
     )
     play.TextSize = 8
     play.BackgroundTransparency = 0
+    play.BackgroundColor3 = Color3.fromRGB(255,248,253)
     play.AutoButtonColor = true
     play.ZIndex = 8
 
     local save = makeButton(
         card,
-        savedMode and "REMOVE" or (State.SavedSet[id] and "★" or "SAVE"),
-        UDim2.fromOffset(107,44),
-        UDim2.fromOffset(40,22)
+        savedMode and "REMOVE" or "SAVE",
+        UDim2.fromOffset(106,43),
+        UDim2.fromOffset(42,23)
     )
     save.TextSize = savedMode and 6 or 7
     save.BackgroundTransparency = 0
+    save.BackgroundColor3 = Color3.fromRGB(255,248,253)
     save.AutoButtonColor = true
     save.ZIndex = 8
 
@@ -1225,7 +1339,7 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
                 AssetId=assetId,
                 Name=name,
             })
-            save.Text = "★"
+            save.Text = "SAVE"
         end
     end)
 
@@ -1689,10 +1803,51 @@ stroke(HideButton,Color3.fromRGB(215,165,205),2,0.05)
 
 makeDraggable(HideButton,HideButton)
 
+local function setAmbientVisible(visible)
+    -- Ambient effects follow the GUI state:
+    -- visible GUI = effects visible
+    -- hidden GUI = effects fade out quickly, then disable
+    if visible then
+        AmbientGui.Enabled = true
+        for _, item in ipairs(ambient) do
+            if item.obj and item.obj.Parent then
+                item.obj.ImageTransparency = 1
+                TweenService:Create(
+                    item.obj,
+                    TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                    {ImageTransparency = item.baseTransparency}
+                ):Play()
+            end
+        end
+    else
+        local pending = 0
+        for _, item in ipairs(ambient) do
+            if item.obj and item.obj.Parent then
+                pending += 1
+                local tween = TweenService:Create(
+                    item.obj,
+                    TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                    {ImageTransparency = 1}
+                )
+                tween.Completed:Connect(function()
+                    pending -= 1
+                    if pending <= 0 and State.Hidden then
+                        AmbientGui.Enabled = false
+                    end
+                end)
+                tween:Play()
+            end
+        end
+        if pending == 0 then
+            AmbientGui.Enabled = false
+        end
+    end
+end
+
 local function toggleMain()
     State.Hidden = not State.Hidden
     Main.Visible = not State.Hidden
-    AmbientGui.Enabled = State.Hidden
+    setAmbientVisible(not State.Hidden)
 end
 
 HideButton.MouseButton1Click:Connect(toggleMain)
@@ -1786,6 +1941,7 @@ for i=1,18 do
 
     table.insert(ambient,{
         obj=obj,
+        baseTransparency=obj.ImageTransparency,
         x=obj.Position.X.Scale,
         y=obj.Position.Y.Scale,
         speed=rng:NextNumber(0.028,0.060),
