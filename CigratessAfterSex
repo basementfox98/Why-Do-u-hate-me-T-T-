@@ -549,6 +549,7 @@ local List = create("ScrollingFrame", {
     Size = UDim2.new(1,0,1,-68),
     Position = UDim2.fromOffset(0,35),
     BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BackgroundTransparency = 0.05,
     BorderSizePixel = 0,
     ScrollBarThickness = 4,
     ScrollBarImageColor3 = Color3.fromRGB(195,165,210),
@@ -560,14 +561,14 @@ corner(List,11)
 stroke(List,Color3.fromRGB(220,205,230),1,0.15)
 
 local ListPadding = create("UIPadding", {
-    PaddingTop = UDim.new(0,7),
-    PaddingBottom = UDim.new(0,7),
-    PaddingLeft = UDim.new(0,7),
-    PaddingRight = UDim.new(0,7),
+    PaddingTop = UDim.new(0,6),
+    PaddingBottom = UDim.new(0,6),
+    PaddingLeft = UDim.new(0,6),
+    PaddingRight = UDim.new(0,6),
 }, List)
 
 local Grid = create("UIGridLayout", {
-    CellSize = UDim2.fromOffset(148,70),
+    CellSize = UDim2.fromOffset(151,72),
     CellPadding = UDim2.fromOffset(7,7),
     HorizontalAlignment = Enum.HorizontalAlignment.Center,
     SortOrder = Enum.SortOrder.LayoutOrder,
@@ -649,6 +650,7 @@ local SavedList = create("ScrollingFrame", {
     Size = UDim2.new(1,0,1,-35),
     Position = UDim2.fromOffset(0,35),
     BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BackgroundTransparency = 0.05,
     BorderSizePixel = 0,
     ScrollBarThickness = 4,
     ScrollBarImageColor3 = Color3.fromRGB(195,165,210),
@@ -659,7 +661,7 @@ corner(SavedList,11)
 stroke(SavedList,Color3.fromRGB(220,205,230),1,0.15)
 
 local SavedGrid = create("UIGridLayout", {
-    CellSize = UDim2.fromOffset(148,70),
+    CellSize = UDim2.fromOffset(151,72),
     CellPadding = UDim2.fromOffset(7,7),
     HorizontalAlignment = Enum.HorizontalAlignment.Center,
 }, SavedList)
@@ -1134,17 +1136,17 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
     local assetId = numericId(item.AssetId or item.assetId) or id
 
     local card = create("Frame", {
-        Size = UDim2.fromOffset(148,70),
+        Size = UDim2.fromOffset(151,72),
         BackgroundColor3 = Color3.fromRGB(251,248,253),
         BorderSizePixel = 0,
         ZIndex = 6,
     }, parent)
-    corner(card,10)
-    stroke(card,Color3.fromRGB(220,205,230),1,0.2)
+    corner(card,11)
+    stroke(card,Color3.fromRGB(220,205,230),1,0.18)
 
     local image = create("ImageLabel", {
-        Size = UDim2.fromOffset(54,54),
-        Position = UDim2.fromOffset(6,8),
+        Size = UDim2.fromOffset(52,52),
+        Position = UDim2.fromOffset(6,10),
         BackgroundColor3 = Color3.fromRGB(240,235,245),
         BackgroundTransparency = 0,
         BorderSizePixel = 0,
@@ -1152,11 +1154,11 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
         ScaleType = Enum.ScaleType.Fit,
         ZIndex = 7,
     }, card)
-    corner(image,8)
+    corner(image,9)
 
     local nameLabel = create("TextLabel", {
-        Size = UDim2.fromOffset(82,20),
-        Position = UDim2.fromOffset(65,5),
+        Size = UDim2.fromOffset(80,18),
+        Position = UDim2.fromOffset(63,5),
         BackgroundTransparency = 1,
         Text = name,
         TextColor3 = Color3.fromRGB(65,55,75),
@@ -1168,18 +1170,44 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
     }, card)
 
     local idLabel = create("TextLabel", {
-        Size = UDim2.fromOffset(82,14),
-        Position = UDim2.fromOffset(65,23),
+        Size = UDim2.fromOffset(70,13),
+        Position = UDim2.fromOffset(63,23),
         BackgroundTransparency = 1,
         Text = "ID: " .. tostring(id),
         TextColor3 = Color3.fromRGB(130,120,140),
         Font = Enum.Font.Gotham,
         TextSize = 7,
         TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
         ZIndex = 7,
     }, card)
 
-    local play = makeButton(card,"PLAY",UDim2.fromOffset(65,42),UDim2.fromOffset(38,23))
+    local fav = makeButton(
+        card,
+        item.Favorite and "★" or "☆",
+        UDim2.fromOffset(116,3),
+        UDim2.fromOffset(15,15)
+    )
+    fav.TextSize = 9
+    fav.BackgroundTransparency = 0.08
+    fav.ZIndex = 9
+
+    local copy = makeButton(
+        card,
+        "⧉",
+        UDim2.fromOffset(133,3),
+        UDim2.fromOffset(15,15)
+    )
+    copy.TextSize = 9
+    copy.BackgroundTransparency = 0.08
+    copy.ZIndex = 9
+
+    local play = makeButton(
+        card,
+        "PLAY",
+        UDim2.fromOffset(63,44),
+        UDim2.fromOffset(40,22)
+    )
     play.TextSize = 8
     play.BackgroundTransparency = 0
     play.AutoButtonColor = true
@@ -1188,35 +1216,13 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
     local save = makeButton(
         card,
         savedMode and "REMOVE" or (State.SavedSet[id] and "★" or "SAVE"),
-        UDim2.fromOffset(107,42),
-        UDim2.fromOffset(35,23)
+        UDim2.fromOffset(107,44),
+        UDim2.fromOffset(40,22)
     )
-    save.TextSize = 7
+    save.TextSize = savedMode and 6 or 7
     save.BackgroundTransparency = 0
     save.AutoButtonColor = true
     save.ZIndex = 8
-
-    local copy = create("TextButton", {
-        Size = UDim2.fromOffset(18,18),
-        Position = UDim2.fromOffset(124,5),
-        BackgroundTransparency = 1,
-        Text = "⧉",
-        TextColor3 = Color3.fromRGB(115,100,130),
-        Font = Enum.Font.GothamBold,
-        TextSize = 12,
-        ZIndex = 9,
-    }, card)
-
-    local fav = create("TextButton", {
-        Size = UDim2.fromOffset(18,18),
-        Position = UDim2.fromOffset(105,5),
-        BackgroundTransparency = 1,
-        Text = item.Favorite and "★" or "☆",
-        TextColor3 = Color3.fromRGB(225,165,60),
-        Font = Enum.Font.GothamBold,
-        TextSize = 12,
-        ZIndex = 9,
-    }, card)
 
     play.MouseButton1Click:Connect(function()
         State.Selected = {Id=id,AssetId=assetId,Name=name}
@@ -1247,7 +1253,6 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
             removeSaved(id)
             task.defer(function()
                 if State.Tab == "Saved" then
-                    -- refresh saved panel
                     local q = SavedSearch.Text or ""
                     renderSaved(q)
                 end
@@ -1820,7 +1825,7 @@ for i=1,18 do
         obj=obj,
         x=obj.Position.X.Scale,
         y=obj.Position.Y.Scale,
-        speed=rng:NextNumber(0.035,0.075),
+        speed=rng:NextNumber(0.028,0.060),
         sway=rng:NextNumber(0.01,0.025),
         phase=rng:NextNumber(0,math.pi*2),
         rotation=rng:NextNumber(-50,50),
@@ -1834,70 +1839,80 @@ RunService.RenderStepped:Connect(function(dt)
     local hue = (State.GradientTime * 0.035) % 1
 
     -- Moving looped gradient in BOTH light and dark themes.
-    Gradient.Offset = Vector2.new(math.sin(State.GradientTime * 0.7) * 0.38, 0)
+    Gradient.Offset = Vector2.new(math.sin(State.GradientTime * 0.7) * 0.48, 0)
 
     local dark = State.Dark
 
+    -- Saiki Music-inspired surfaces: dark navy/indigo, not flat black.
     if dark then
-        Main.BackgroundColor3 = Color3.fromRGB(20,17,24)
+        Main.BackgroundColor3 = Color3.fromRGB(13,16,25)
         Gradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,Color3.fromRGB(76,34,82)),
-            ColorSequenceKeypoint.new(0.5,Color3.fromRGB(35,24,58)),
-            ColorSequenceKeypoint.new(1,Color3.fromRGB(28,64,56)),
+            ColorSequenceKeypoint.new(0,Color3.fromRGB(86,39,70)),
+            ColorSequenceKeypoint.new(0.45,Color3.fromRGB(27,31,58)),
+            ColorSequenceKeypoint.new(1,Color3.fromRGB(24,52,58)),
         })
-        MainStroke.Color = Color3.fromRGB(145,105,155)
-        Title.TextColor3 = Color3.fromRGB(245,235,248)
-        Subtitle.TextColor3 = Color3.fromRGB(175,160,180)
+        MainStroke.Color = Color3.fromRGB(160,104,132)
+        Title.TextColor3 = Color3.fromRGB(242,235,246)
+        Subtitle.TextColor3 = Color3.fromRGB(171,163,185)
 
-        Search.BackgroundColor3 = Color3.fromRGB(31,27,36)
-        Search.TextColor3 = Color3.fromRGB(240,235,245)
-        Search.PlaceholderColor3 = Color3.fromRGB(145,135,155)
+        Search.BackgroundColor3 = Color3.fromRGB(31,36,54)
+        Search.BackgroundTransparency = 0.02
+        Search.TextColor3 = Color3.fromRGB(242,235,246)
+        Search.PlaceholderColor3 = Color3.fromRGB(171,163,185)
         SearchIcon.Image = SEARCH_WHITE
 
-        SavedSearch.BackgroundColor3 = Color3.fromRGB(31,27,36)
-        SavedSearch.TextColor3 = Color3.fromRGB(240,235,245)
-        SavedSearch.PlaceholderColor3 = Color3.fromRGB(145,135,155)
+        SavedSearch.BackgroundColor3 = Color3.fromRGB(31,36,54)
+        SavedSearch.BackgroundTransparency = 0.02
+        SavedSearch.TextColor3 = Color3.fromRGB(242,235,246)
+        SavedSearch.PlaceholderColor3 = Color3.fromRGB(171,163,185)
         SavedSearchIcon.Image = SEARCH_WHITE
 
-        List.BackgroundColor3 = Color3.fromRGB(27,24,31)
-        SavedList.BackgroundColor3 = Color3.fromRGB(27,24,31)
-        PageBox.BackgroundColor3 = Color3.fromRGB(31,27,36)
-        PageBox.TextColor3 = Color3.fromRGB(240,235,245)
+        List.BackgroundColor3 = Color3.fromRGB(24,28,42)
+        List.BackgroundTransparency = 0.06
+        SavedList.BackgroundColor3 = Color3.fromRGB(24,28,42)
+        SavedList.BackgroundTransparency = 0.06
+        PageBox.BackgroundColor3 = Color3.fromRGB(31,36,54)
+        PageBox.BackgroundTransparency = 0.02
+        PageBox.TextColor3 = Color3.fromRGB(242,235,246)
 
-        -- Every normal button becomes a dark rounded control.
         for _,obj in ipairs(Main:GetDescendants()) do
             if obj:IsA("TextButton") then
-                obj.BackgroundColor3 = Color3.fromRGB(40,34,45)
-                obj.TextColor3 = Color3.fromRGB(240,230,245)
+                obj.BackgroundColor3 = Color3.fromRGB(31,36,54)
+                obj.TextColor3 = Color3.fromRGB(242,235,246)
             elseif obj:IsA("TextBox") then
-                obj.BackgroundColor3 = Color3.fromRGB(31,27,36)
-                obj.TextColor3 = Color3.fromRGB(240,235,245)
+                obj.BackgroundColor3 = Color3.fromRGB(31,36,54)
+                obj.TextColor3 = Color3.fromRGB(242,235,246)
             end
         end
     else
-        Main.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        Main.BackgroundColor3 = Color3.fromRGB(248,245,255)
         Gradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,Color3.fromRGB(255,224,240)),
-            ColorSequenceKeypoint.new(.5,Color3.fromRGB(236,224,255)),
-            ColorSequenceKeypoint.new(1,Color3.fromRGB(222,249,241)),
+            ColorSequenceKeypoint.new(0,Color3.fromRGB(255,226,241)),
+            ColorSequenceKeypoint.new(0.48,Color3.fromRGB(235,226,255)),
+            ColorSequenceKeypoint.new(1,Color3.fromRGB(213,249,239)),
         })
         MainStroke.Color = Color3.fromRGB(220,205,230)
         Title.TextColor3 = Color3.fromRGB(53,49,67)
         Subtitle.TextColor3 = Color3.fromRGB(116,108,130)
 
         Search.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        Search.BackgroundTransparency = 0
         Search.TextColor3 = Color3.fromRGB(55,47,65)
         Search.PlaceholderColor3 = Color3.fromRGB(130,120,140)
         SearchIcon.Image = SEARCH_BLACK
 
         SavedSearch.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        SavedSearch.BackgroundTransparency = 0
         SavedSearch.TextColor3 = Color3.fromRGB(55,47,65)
         SavedSearch.PlaceholderColor3 = Color3.fromRGB(130,120,140)
         SavedSearchIcon.Image = SEARCH_BLACK
 
         List.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        List.BackgroundTransparency = 0.05
         SavedList.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        SavedList.BackgroundTransparency = 0.05
         PageBox.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        PageBox.BackgroundTransparency = 0
         PageBox.TextColor3 = Color3.fromRGB(80,70,90)
 
         for _,obj in ipairs(Main:GetDescendants()) do
@@ -1912,9 +1927,9 @@ RunService.RenderStepped:Connect(function(dt)
     end
 
     -- Re-theme rendered cards without recreating them every frame.
-    local cardColor = dark and Color3.fromRGB(36,31,40) or Color3.fromRGB(251,248,253)
-    local buttonColor = dark and Color3.fromRGB(48,40,53) or Color3.fromRGB(255,248,253)
-    local textColor = dark and Color3.fromRGB(235,225,240) or Color3.fromRGB(65,55,75)
+    local cardColor = dark and Color3.fromRGB(31,36,54) or Color3.fromRGB(251,248,253)
+    local buttonColor = dark and Color3.fromRGB(45,50,72) or Color3.fromRGB(255,248,253)
+    local textColor = dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(65,55,75)
 
     for _,obj in ipairs(List:GetChildren()) do
         if obj:IsA("Frame") then
@@ -1925,6 +1940,16 @@ RunService.RenderStepped:Connect(function(dt)
                 elseif child:IsA("TextButton") then
                     child.BackgroundColor3 = buttonColor
                     child.TextColor3 = dark and Color3.fromRGB(240,230,245) or Color3.fromRGB(55,47,65)
+                end
+            end
+        end
+    end
+
+    for _,obj in ipairs(List:GetChildren()) do
+        if obj:IsA("Frame") then
+            for _,child in ipairs(obj:GetChildren()) do
+                if child:IsA("TextButton") and (child.Text == "PLAY" or child.Text == "SAVE" or child.Text == "REMOVE" or child.Text == "★") then
+                    child.BackgroundColor3 = dark and Color3.fromRGB(45,50,72) or Color3.fromRGB(255,248,253)
                 end
             end
         end
