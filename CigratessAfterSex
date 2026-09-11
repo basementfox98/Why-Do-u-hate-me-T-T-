@@ -330,6 +330,7 @@ local AmbientGui = create("ScreenGui", {
     IgnoreGuiInset = true,
     DisplayOrder = 40,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    Enabled = false,
 }, UIParent)
 
 local AmbientLayer = create("Frame", {
@@ -1182,26 +1183,6 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
         ZIndex = 7,
     }, card)
 
-    local fav = makeButton(
-        card,
-        item.Favorite and "★" or "☆",
-        UDim2.fromOffset(116,3),
-        UDim2.fromOffset(15,15)
-    )
-    fav.TextSize = 9
-    fav.BackgroundTransparency = 0.08
-    fav.ZIndex = 9
-
-    local copy = makeButton(
-        card,
-        "⧉",
-        UDim2.fromOffset(133,3),
-        UDim2.fromOffset(15,15)
-    )
-    copy.TextSize = 9
-    copy.BackgroundTransparency = 0.08
-    copy.ZIndex = 9
-
     local play = makeButton(
         card,
         "PLAY",
@@ -1227,25 +1208,6 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
     play.MouseButton1Click:Connect(function()
         State.Selected = {Id=id,AssetId=assetId,Name=name}
         playEmote(assetId,name)
-    end)
-
-    copy.MouseButton1Click:Connect(function()
-        if safeSetClipboard(assetId) then
-            toast("Animation ID copied")
-        else
-            toast("Clipboard unavailable")
-        end
-    end)
-
-    fav.MouseButton1Click:Connect(function()
-        item.Favorite = not item.Favorite
-        fav.Text = item.Favorite and "★" or "☆"
-
-        local savedIndex,savedItem = findSaved(id)
-        if savedItem then
-            savedItem.Favorite = item.Favorite
-            saveSaved()
-        end
     end)
 
     save.MouseButton1Click:Connect(function()
@@ -1730,6 +1692,7 @@ makeDraggable(HideButton,HideButton)
 local function toggleMain()
     State.Hidden = not State.Hidden
     Main.Visible = not State.Hidden
+    AmbientGui.Enabled = State.Hidden
 end
 
 HideButton.MouseButton1Click:Connect(toggleMain)
@@ -1845,45 +1808,36 @@ RunService.RenderStepped:Connect(function(dt)
 
     -- Saiki Music-inspired surfaces: dark navy/indigo, not flat black.
     if dark then
-        Main.BackgroundColor3 = Color3.fromRGB(13,16,25)
+        Main.BackgroundColor3 = Color3.fromRGB(20,17,24)
         Gradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,Color3.fromRGB(86,39,70)),
-            ColorSequenceKeypoint.new(0.45,Color3.fromRGB(27,31,58)),
-            ColorSequenceKeypoint.new(1,Color3.fromRGB(24,52,58)),
+            ColorSequenceKeypoint.new(0,Color3.fromRGB(76,34,82)),
+            ColorSequenceKeypoint.new(0.45,Color3.fromRGB(35,24,58)),
+            ColorSequenceKeypoint.new(1,Color3.fromRGB(28,64,56)),
         })
         MainStroke.Color = Color3.fromRGB(160,104,132)
         Title.TextColor3 = Color3.fromRGB(242,235,246)
         Subtitle.TextColor3 = Color3.fromRGB(171,163,185)
 
-        Search.BackgroundColor3 = Color3.fromRGB(31,36,54)
+        Search.BackgroundColor3 = Color3.fromRGB(31,27,36)
         Search.BackgroundTransparency = 0.02
         Search.TextColor3 = Color3.fromRGB(242,235,246)
         Search.PlaceholderColor3 = Color3.fromRGB(171,163,185)
         SearchIcon.Image = SEARCH_WHITE
 
-        SavedSearch.BackgroundColor3 = Color3.fromRGB(31,36,54)
+        SavedSearch.BackgroundColor3 = Color3.fromRGB(31,27,36)
         SavedSearch.BackgroundTransparency = 0.02
         SavedSearch.TextColor3 = Color3.fromRGB(242,235,246)
         SavedSearch.PlaceholderColor3 = Color3.fromRGB(171,163,185)
         SavedSearchIcon.Image = SEARCH_WHITE
 
-        List.BackgroundColor3 = Color3.fromRGB(24,28,42)
+        List.BackgroundColor3 = Color3.fromRGB(27,24,31)
         List.BackgroundTransparency = 0.06
-        SavedList.BackgroundColor3 = Color3.fromRGB(24,28,42)
+        SavedList.BackgroundColor3 = Color3.fromRGB(27,24,31)
         SavedList.BackgroundTransparency = 0.06
-        PageBox.BackgroundColor3 = Color3.fromRGB(31,36,54)
+        PageBox.BackgroundColor3 = Color3.fromRGB(31,27,36)
         PageBox.BackgroundTransparency = 0.02
         PageBox.TextColor3 = Color3.fromRGB(242,235,246)
 
-        for _,obj in ipairs(Main:GetDescendants()) do
-            if obj:IsA("TextButton") then
-                obj.BackgroundColor3 = Color3.fromRGB(31,36,54)
-                obj.TextColor3 = Color3.fromRGB(242,235,246)
-            elseif obj:IsA("TextBox") then
-                obj.BackgroundColor3 = Color3.fromRGB(31,36,54)
-                obj.TextColor3 = Color3.fromRGB(242,235,246)
-            end
-        end
     else
         Main.BackgroundColor3 = Color3.fromRGB(248,245,255)
         Gradient.Color = ColorSequence.new({
@@ -1915,20 +1869,11 @@ RunService.RenderStepped:Connect(function(dt)
         PageBox.BackgroundTransparency = 0
         PageBox.TextColor3 = Color3.fromRGB(80,70,90)
 
-        for _,obj in ipairs(Main:GetDescendants()) do
-            if obj:IsA("TextButton") then
-                obj.BackgroundColor3 = Color3.fromRGB(255,248,253)
-                obj.TextColor3 = Color3.fromRGB(55,47,65)
-            elseif obj:IsA("TextBox") then
-                obj.BackgroundColor3 = Color3.fromRGB(255,255,255)
-                obj.TextColor3 = Color3.fromRGB(55,47,65)
-            end
-        end
     end
 
     -- Re-theme rendered cards without recreating them every frame.
-    local cardColor = dark and Color3.fromRGB(31,36,54) or Color3.fromRGB(251,248,253)
-    local buttonColor = dark and Color3.fromRGB(45,50,72) or Color3.fromRGB(255,248,253)
+    local cardColor = dark and Color3.fromRGB(31,27,36) or Color3.fromRGB(251,248,253)
+    local buttonColor = dark and Color3.fromRGB(42,37,49) or Color3.fromRGB(255,248,253)
     local textColor = dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(65,55,75)
 
     for _,obj in ipairs(List:GetChildren()) do
@@ -1949,7 +1894,7 @@ RunService.RenderStepped:Connect(function(dt)
         if obj:IsA("Frame") then
             for _,child in ipairs(obj:GetChildren()) do
                 if child:IsA("TextButton") and (child.Text == "PLAY" or child.Text == "SAVE" or child.Text == "REMOVE" or child.Text == "★") then
-                    child.BackgroundColor3 = dark and Color3.fromRGB(45,50,72) or Color3.fromRGB(255,248,253)
+                    child.BackgroundColor3 = dark and Color3.fromRGB(42,37,49) or Color3.fromRGB(255,248,253)
                 end
             end
         end
