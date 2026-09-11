@@ -44,6 +44,7 @@
 --==============================================================
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
@@ -330,7 +331,7 @@ local AmbientGui = create("ScreenGui", {
     IgnoreGuiInset = true,
     DisplayOrder = 40,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-    Enabled = true,
+    Enabled = false,
 }, UIParent)
 
 local AmbientLayer = create("Frame", {
@@ -1758,9 +1759,6 @@ stroke(HideButton,Color3.fromRGB(215,165,205),2,0.05)
 makeDraggable(HideButton,HideButton)
 
 local function setAmbientVisible(visible)
-    -- Ambient effects follow the GUI state:
-    -- visible GUI = effects visible
-    -- hidden GUI = effects fade out quickly, then disable
     if visible then
         AmbientGui.Enabled = true
         for _, item in ipairs(ambient) do
@@ -1768,40 +1766,38 @@ local function setAmbientVisible(visible)
                 item.obj.ImageTransparency = 1
                 TweenService:Create(
                     item.obj,
-                    TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                    TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
                     {ImageTransparency = item.baseTransparency}
                 ):Play()
             end
         end
     else
-        local pending = 0
         for _, item in ipairs(ambient) do
             if item.obj and item.obj.Parent then
-                pending += 1
-                local tween = TweenService:Create(
+                TweenService:Create(
                     item.obj,
-                    TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                    TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
                     {ImageTransparency = 1}
-                )
-                tween.Completed:Connect(function()
-                    pending -= 1
-                    if pending <= 0 and State.Hidden then
-                        AmbientGui.Enabled = false
-                    end
-                end)
-                tween:Play()
+                ):Play()
             end
         end
-        if pending == 0 then
-            AmbientGui.Enabled = false
-        end
+        task.delay(0.15, function()
+            if State.Hidden then
+                AmbientGui.Enabled = false
+            end
+        end)
     end
+end
+
+local function setEffectsForMain(visible)
+    setAmbientVisible(visible)
+    setBackgroundBlur(visible)
 end
 
 local function toggleMain()
     State.Hidden = not State.Hidden
     Main.Visible = not State.Hidden
-    setAmbientVisible(not State.Hidden)
+    setEffectsForMain(not State.Hidden)
 end
 
 HideButton.MouseButton1Click:Connect(toggleMain)
@@ -1860,6 +1856,38 @@ RunService.RenderStepped:Connect(function()
         end
     end)
 end)
+
+--==============================================================
+-- BACKGROUND BLUR
+--==============================================================
+local ScreenBlur = Lighting:FindFirstChild("SaikiEmotesBlur")
+if not ScreenBlur or not ScreenBlur:IsA("BlurEffect") then
+    if ScreenBlur then pcall(function() ScreenBlur:Destroy() end) end
+    ScreenBlur = Instance.new("BlurEffect")
+    ScreenBlur.Name = "SaikiEmotesBlur"
+    ScreenBlur.Size = 0
+    ScreenBlur.Parent = Lighting
+end
+
+local BLUR_SIZE = 14
+local BLUR_TIME = 0.16
+
+local function setBackgroundBlur(visible)
+    if visible then
+        ScreenBlur.Enabled = true
+        TweenService:Create(ScreenBlur, TweenInfo.new(BLUR_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = BLUR_SIZE}):Play()
+    else
+        local tween = TweenService:Create(ScreenBlur, TweenInfo.new(BLUR_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Size = 0})
+        tween.Completed:Connect(function()
+            if State.Hidden then ScreenBlur.Enabled = false end
+        end)
+        tween:Play()
+    end
+end
+
+
+-- Start with effects matching the initial visible GUI state.
+setEffectsForMain(not State.Hidden)
 
 --==============================================================
 -- SAIKI AMBIENT EFFECTS
