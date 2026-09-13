@@ -798,8 +798,7 @@ local function renderSearchHistory()
 end
 
 local RefreshButton = makeButton(CatalogFrame,"↻",UDim2.new(1,-242,0,0),UDim2.fromOffset(42,29))
-local SortButton = makeButton(CatalogFrame,"Sort",UDim2.new(1,-194,0,0),UDim2.fromOffset(60,29))
-local TrendButton = makeButton(CatalogFrame,"TREND",UDim2.new(1,-128,0,0),UDim2.fromOffset(60,29))
+local SortButton = makeButton(CatalogFrame,"Sort",UDim2.new(1,-194,0,0),UDim2.fromOffset(122,29))
 local AddIdButton = makeButton(CatalogFrame,"+ ID",UDim2.new(1,-66,0,0),UDim2.fromOffset(62,29))
 Search.Size = UDim2.new(1,-250,0,29)
 
@@ -1945,19 +1944,6 @@ SortButton.MouseButton1Click:Connect(function()
     loadCatalog(Search.Text or "")
 end)
 
-TrendButton.MouseButton1Click:Connect(function()
-    -- Trending is represented by Roblox's most-favorited ordering.
-    for i,sortInfo in ipairs(Sorts) do
-        if sortInfo[1] == Enum.CatalogSortType.MostFavorited then
-            SortIndex = i
-            break
-        end
-    end
-    SortButton.Text = Sorts[SortIndex][2]
-    Search.Text = ""
-    toast("Trending emotes • Most Favorited")
-    loadCatalog("")
-end)
 
 SearchClear.MouseButton1Click:Connect(function()
     Search.Text = ""
@@ -2305,7 +2291,7 @@ applyTheme = function()
     SearchHistoryFrame.BackgroundColor3 = surface
     SearchHistoryTitle.TextColor3 = muted
 
-    for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,TrendButton,AddIdButton,SearchClear,SearchHistoryClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop}) do
+    for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,AddIdButton,SearchClear,SearchHistoryClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop}) do
         button.BackgroundColor3 = buttonSurface
         button.TextColor3 = text
     end
