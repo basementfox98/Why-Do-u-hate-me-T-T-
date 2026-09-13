@@ -1,5 +1,5 @@
 --[[
-    SAIKI EMOTES — GAZE EDITION
+    SAIKI EMOTES — GAZE EDITION + VEX FEATURES
     Compact rebuild based on the supplied GazeOld + Saiki Music references.
 
     INCLUDED FROM GAZE:
@@ -120,12 +120,16 @@ local State = {
 
     Saved = {},
     SavedSet = {},
+    Favorites = {},
+    FavoriteSet = {},
+    Recent = {},
 
     GradientTime = 0,
 }
 
 local PAGE_SIZE = 10
 local SAVE_FILE = "SaikiEmotes_GazeSaved.json"
+local MAX_RECENT = 20
 
 --==============================================================
 -- HELPERS
@@ -211,7 +215,7 @@ local function numericId(value)
 end
 
 --==============================================================
--- PERSISTENT SAVED EMOTES
+-- PERSISTENT SAVED / FAVORITE / RECENT EMOTES
 --==============================================================
 local function rebuildSavedSet()
     State.SavedSet = {}
@@ -221,29 +225,78 @@ local function rebuildSavedSet()
     end
 end
 
+local function rebuildFavoriteSet()
+    State.FavoriteSet = {}
+    for _, item in ipairs(State.Favorites) do
+        local id = numericId(item.Id or item.AssetId)
+        if id then State.FavoriteSet[id] = true end
+    end
+end
+
+local function normalizeEmote(item)
+    if type(item) ~= "table" then return nil end
+    local id = numericId(item.Id or item.id or item.AssetId or item.assetId)
+    if not id then return nil end
+    local assetId = numericId(item.AssetId or item.assetId) or id
+    return {
+        Id = id,
+        AssetId = assetId,
+        Name = tostring(item.Name or item.name or ("Emote " .. id)),
+        AnimationId = item.AnimationId or ("rbxassetid://" .. tostring(assetId)),
+    }
+end
+
 local function loadSaved()
     State.Saved = {}
+    State.Favorites = {}
+    State.Recent = {}
 
     pcall(function()
-        if type(isfile) == "function" and isfile(SAVE_FILE)
-            and type(readfile) == "function" then
+        if type(isfile) ~= "function" or not isfile(SAVE_FILE)
+            or type(readfile) ~= "function" then
+            return
+        end
 
-            local decoded = HttpService:JSONDecode(readfile(SAVE_FILE))
-            if type(decoded) == "table" then
-                State.Saved = decoded
+        local decoded = HttpService:JSONDecode(readfile(SAVE_FILE))
+        if type(decoded) ~= "table" then return end
+
+        -- Backward compatible with v16's plain saved-emote array.
+        if #decoded > 0 then
+            for _, item in ipairs(decoded) do
+                local normalized = normalizeEmote(item)
+                if normalized then table.insert(State.Saved, normalized) end
+            end
+        else
+            for _, item in ipairs(decoded.saved or {}) do
+                local normalized = normalizeEmote(item)
+                if normalized then table.insert(State.Saved, normalized) end
+            end
+            for _, item in ipairs(decoded.favorites or {}) do
+                local normalized = normalizeEmote(item)
+                if normalized then table.insert(State.Favorites, normalized) end
+            end
+            for _, item in ipairs(decoded.recent or {}) do
+                local normalized = normalizeEmote(item)
+                if normalized then table.insert(State.Recent, normalized) end
             end
         end
     end)
 
     rebuildSavedSet()
+    rebuildFavoriteSet()
 end
 
-local function saveSaved()
+local function saveData()
     rebuildSavedSet()
+    rebuildFavoriteSet()
 
     pcall(function()
         if type(writefile) == "function" then
-            writefile(SAVE_FILE, HttpService:JSONEncode(State.Saved))
+            writefile(SAVE_FILE, HttpService:JSONEncode({
+                saved = State.Saved,
+                favorites = State.Favorites,
+                recent = State.Recent,
+            }))
         end
     end)
 end
@@ -257,35 +310,75 @@ local function findSaved(id)
     end
 end
 
-local function addSaved(item)
-    local id = numericId(item.Id or item.AssetId)
-    if not id then return end
+local function findFavorite(id)
+    id = numericId(id)
+    for i,item in ipairs(State.Favorites) do
+        if numericId(item.Id or item.AssetId) == id then
+            return i,item
+        end
+    end
+end
 
-    if findSaved(id) then
+local function addSaved(item)
+    local normalized = normalizeEmote(item)
+    if not normalized then return end
+    if findSaved(normalized.Id) then
         toast("Already saved")
         return
     end
-
-    local realId = numericId(item.AssetId) or id
-    table.insert(State.Saved, {
-        Id = id,
-        AssetId = realId,
-        Name = tostring(item.Name or "Unknown"),
-        AnimationId = "rbxassetid://" .. tostring(realId),
-        Favorite = false,
-    })
-
-    saveSaved()
-    toast("Saved • " .. tostring(item.Name or "Emote"))
+    table.insert(State.Saved, normalized)
+    saveData()
+    toast("Saved • " .. normalized.Name)
 end
 
 local function removeSaved(id)
     local index = findSaved(id)
     if not index then return end
-
     table.remove(State.Saved, index)
-    saveSaved()
+    saveData()
     toast("Removed from Saved")
+end
+
+local function addFavorite(item)
+    local normalized = normalizeEmote(item)
+    if not normalized then return end
+    if findFavorite(normalized.Id) then return end
+    table.insert(State.Favorites, normalized)
+    saveData()
+    toast("Added to Favorites")
+end
+
+local function removeFavorite(id)
+    local index = findFavorite(id)
+    if not index then return end
+    table.remove(State.Favorites, index)
+    saveData()
+    toast("Removed from Favorites")
+end
+
+local function toggleFavorite(item)
+    local id = numericId(item.Id or item.AssetId)
+    if not id then return end
+    if findFavorite(id) then
+        removeFavorite(id)
+    else
+        addFavorite(item)
+    end
+end
+
+local function addRecent(item)
+    local normalized = normalizeEmote(item)
+    if not normalized then return end
+    for i = #State.Recent, 1, -1 do
+        if numericId(State.Recent[i].Id or State.Recent[i].AssetId) == normalized.Id then
+            table.remove(State.Recent, i)
+        end
+    end
+    table.insert(State.Recent, 1, normalized)
+    while #State.Recent > MAX_RECENT do
+        table.remove(State.Recent)
+    end
+    saveData()
 end
 
 loadSaved()
@@ -600,9 +693,11 @@ end)
 --==============================================================
 -- TAB BAR
 --==============================================================
-local CatalogTab = makeButton(Main,"CATALOG",UDim2.fromOffset(10,64),UDim2.fromOffset(105,28))
-local SavedTab = makeButton(Main,"SAVED",UDim2.fromOffset(121,64),UDim2.fromOffset(90,28))
-local SettingsTab = makeButton(Main,"SETTINGS",UDim2.fromOffset(217,64),UDim2.fromOffset(100,28))
+local CatalogTab = makeButton(Main,"CATALOG",UDim2.fromOffset(10,64),UDim2.fromOffset(88,28))
+local SavedTab = makeButton(Main,"SAVED",UDim2.fromOffset(103,64),UDim2.fromOffset(82,28))
+local FavoritesTab = makeButton(Main,"FAVORITES",UDim2.fromOffset(190,64),UDim2.fromOffset(96,28))
+local RecentTab = makeButton(Main,"RECENT",UDim2.fromOffset(291,64),UDim2.fromOffset(82,28))
+local SettingsTab = makeButton(Main,"SETTINGS",UDim2.fromOffset(378,64),UDim2.fromOffset(102,28))
 
 --==============================================================
 -- CATALOG TOP CONTROLS
@@ -767,6 +862,54 @@ local SavedGrid = create("UIGridLayout", {
     CellPadding = UDim2.fromOffset(7,7),
     HorizontalAlignment = Enum.HorizontalAlignment.Center,
 }, SavedList)
+
+--==============================================================
+-- FAVORITES / RECENT FRAMES
+--==============================================================
+local FavoritesFrame = create("Frame", {
+    Size = UDim2.new(1,-20,1,-102),
+    Position = UDim2.fromOffset(10,98),
+    BackgroundTransparency = 1,
+    Visible = false,
+    ZIndex = 5,
+}, Main)
+
+local FavoritesList = create("ScrollingFrame", {
+    Size = UDim2.new(1,0,1,0),
+    Position = UDim2.fromOffset(0,0),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BackgroundTransparency = 0.05,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 4,
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    CanvasSize = UDim2.new(),
+    ZIndex = 5,
+}, FavoritesFrame)
+corner(FavoritesList,11)
+stroke(FavoritesList,Color3.fromRGB(220,205,230),1,0.15)
+create("UIPadding", {PaddingTop=UDim.new(0,8),PaddingBottom=UDim.new(0,8),PaddingLeft=UDim.new(0,6),PaddingRight=UDim.new(0,6)}, FavoritesList)
+local FavoritesGrid = create("UIGridLayout", {
+    CellSize=UDim2.fromOffset(151,72), CellPadding=UDim2.fromOffset(7,7),
+    HorizontalAlignment=Enum.HorizontalAlignment.Center, SortOrder=Enum.SortOrder.LayoutOrder,
+}, FavoritesList)
+
+local RecentFrame = create("Frame", {
+    Size = UDim2.new(1,-20,1,-102), Position = UDim2.fromOffset(10,98),
+    BackgroundTransparency = 1, Visible = false, ZIndex = 5,
+}, Main)
+local RecentList = create("ScrollingFrame", {
+    Size=UDim2.new(1,0,1,0), Position=UDim2.fromOffset(0,0),
+    BackgroundColor3=Color3.fromRGB(255,255,255), BackgroundTransparency=0.05,
+    BorderSizePixel=0, ScrollBarThickness=4, AutomaticCanvasSize=Enum.AutomaticSize.Y,
+    CanvasSize=UDim2.new(), ZIndex=5,
+}, RecentFrame)
+corner(RecentList,11)
+stroke(RecentList,Color3.fromRGB(220,205,230),1,0.15)
+create("UIPadding", {PaddingTop=UDim.new(0,8),PaddingBottom=UDim.new(0,8),PaddingLeft=UDim.new(0,6),PaddingRight=UDim.new(0,6)}, RecentList)
+local RecentGrid = create("UIGridLayout", {
+    CellSize=UDim2.fromOffset(151,72), CellPadding=UDim2.fromOffset(7,7),
+    HorizontalAlignment=Enum.HorizontalAlignment.Center, SortOrder=Enum.SortOrder.LayoutOrder,
+}, RecentList)
 
 --==============================================================
 -- SETTINGS FRAME
@@ -1214,6 +1357,8 @@ end
 --==============================================================
 local CatalogCards = {}
 local SavedCards = {}
+local FavoriteCards = {}
+local RecentCards = {}
 local renderSerial = 0
 
 local function clearCardTable(tbl)
@@ -1291,21 +1436,43 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
     play.AutoButtonColor = true
     play.ZIndex = 8
 
-    local save = makeButton(
-        card,
-        savedMode and "REMOVE" or "SAVE",
-        UDim2.fromOffset(106,43),
-        UDim2.fromOffset(42,23)
-    )
+    local save = makeButton(card, savedMode and "REMOVE" or "SAVE", UDim2.fromOffset(106,43), UDim2.fromOffset(42,23))
     save.TextSize = savedMode and 6 or 7
     save.BackgroundTransparency = 0
     save.BackgroundColor3 = Color3.fromRGB(255,248,253)
     save.AutoButtonColor = true
     save.ZIndex = 8
 
+    local favorite = makeButton(card, State.FavoriteSet[id] and "★" or "☆", UDim2.fromOffset(126,5), UDim2.fromOffset(19,19))
+    favorite.TextSize = 12
+    favorite.BackgroundTransparency = 0.08
+    favorite.ZIndex = 9
+
+    local copy = makeButton(card, "ID", UDim2.fromOffset(83,24), UDim2.fromOffset(22,15))
+    copy.TextSize = 6
+    copy.ZIndex = 9
+
     play.MouseButton1Click:Connect(function()
         State.Selected = {Id=id,AssetId=assetId,Name=name}
-        playEmote(assetId,name)
+        if playEmote(assetId,name) then
+            addRecent({Id=id,AssetId=assetId,Name=name})
+        end
+    end)
+
+    favorite.MouseButton1Click:Connect(function()
+        toggleFavorite({Id=id, AssetId=assetId, Name=name})
+        favorite.Text = State.FavoriteSet[id] and "★" or "☆"
+        task.defer(function()
+            if State.Tab == "Favorites" then renderFavorites("") end
+        end)
+    end)
+
+    copy.MouseButton1Click:Connect(function()
+        if safeSetClipboard(tostring(id)) then
+            toast("Copied ID • " .. tostring(id))
+        else
+            toast("Clipboard unavailable • ID " .. tostring(id))
+        end
     end)
 
     save.MouseButton1Click:Connect(function()
@@ -1333,6 +1500,8 @@ end
 -- forward declaration for callbacks
 local loadCatalog
 local renderSaved
+local renderFavorites
+local renderRecent
 
 --==============================================================
 -- CATALOG RENDER / PAGINATION
@@ -1556,6 +1725,40 @@ renderSaved = function(keyword)
     end
 end
 
+local function renderSimpleCollection(list, cards, items, emptyText)
+    clearCardTable(cards)
+    for _,item in ipairs(items) do
+        createEmoteCard(item, list, cards, false)
+    end
+    local empty = list:FindFirstChild("CollectionEmpty")
+    if #items == 0 then
+        if not empty then
+            empty = create("TextLabel", {Name="CollectionEmpty",Size=UDim2.new(1,-20,0,30),Position=UDim2.new(0,10,0.5,-15),BackgroundTransparency=1,Text=emptyText,Font=Enum.Font.GothamBold,TextSize=13,TextColor3=Color3.fromRGB(115,105,125),ZIndex=8}, list)
+        end
+        empty.Visible = true
+    elseif empty then
+        empty.Visible = false
+    end
+end
+
+renderFavorites = function(keyword)
+    local q = tostring(keyword or ""):lower()
+    local items = {}
+    for _,item in ipairs(State.Favorites) do
+        if q == "" or tostring(item.Name):lower():find(q,1,true) then table.insert(items,item) end
+    end
+    renderSimpleCollection(FavoritesList,FavoritesCards,items,"No favorite emotes")
+end
+
+renderRecent = function(keyword)
+    local q = tostring(keyword or ""):lower()
+    local items = {}
+    for _,item in ipairs(State.Recent) do
+        if q == "" or tostring(item.Name):lower():find(q,1,true) then table.insert(items,item) end
+    end
+    renderSimpleCollection(RecentList,RecentCards,items,"No recently played emotes")
+end
+
 --==============================================================
 -- CUSTOM ID
 --==============================================================
@@ -1716,26 +1919,31 @@ setTab = function(tab)
 
     CatalogFrame.Visible = tab == "Catalog"
     SavedFrame.Visible = tab == "Saved"
+    FavoritesFrame.Visible = tab == "Favorites"
+    RecentFrame.Visible = tab == "Recent"
     SettingsFrame.Visible = tab == "Settings"
 
     local tabOn = State.Dark and Color3.fromRGB(76,55,82) or Color3.fromRGB(235,220,245)
     local tabOff = State.Dark and Color3.fromRGB(42,37,49) or Color3.fromRGB(255,248,253)
-
-    CatalogTab.BackgroundColor3 = tab == "Catalog" and tabOn or tabOff
-    SavedTab.BackgroundColor3 = tab == "Saved" and tabOn or tabOff
-    SettingsTab.BackgroundColor3 = tab == "Settings" and tabOn or tabOff
+    for _,entry in ipairs({{CatalogTab,"Catalog"},{SavedTab,"Saved"},{FavoritesTab,"Favorites"},{RecentTab,"Recent"},{SettingsTab,"Settings"}}) do
+        entry[1].BackgroundColor3 = tab == entry[2] and tabOn or tabOff
+    end
     local tabText = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(55,47,65)
-    CatalogTab.TextColor3 = tabText
-    SavedTab.TextColor3 = tabText
-    SettingsTab.TextColor3 = tabText
+    CatalogTab.TextColor3 = tabText; SavedTab.TextColor3 = tabText; FavoritesTab.TextColor3 = tabText; RecentTab.TextColor3 = tabText; SettingsTab.TextColor3 = tabText
 
     if tab == "Saved" then
         renderSaved(SavedSearch.Text or "")
+    elseif tab == "Favorites" then
+        renderFavorites("")
+    elseif tab == "Recent" then
+        renderRecent("")
     end
 end
 
 CatalogTab.MouseButton1Click:Connect(function() setTab("Catalog") end)
 SavedTab.MouseButton1Click:Connect(function() setTab("Saved") end)
+FavoritesTab.MouseButton1Click:Connect(function() setTab("Favorites") end)
+RecentTab.MouseButton1Click:Connect(function() setTab("Recent") end)
 SettingsTab.MouseButton1Click:Connect(function() setTab("Settings") end)
 
 ResetButton.MouseButton1Click:Connect(function()
@@ -1949,7 +2157,7 @@ applyTheme = function()
     SearchIcon.Image = dark and SEARCH_WHITE or SEARCH_BLACK
     SavedSearchIcon.Image = dark and SEARCH_WHITE or SEARCH_BLACK
 
-    for _,button in ipairs({CatalogTab,SavedTab,SettingsTab,RefreshButton,SortButton,AddIdButton,Prev,Next,AnchorButton,ThemeButton,CloseButton,SavedAddId}) do
+    for _,button in ipairs({CatalogTab,SavedTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,AddIdButton,Prev,Next,AnchorButton,ThemeButton,CloseButton,SavedAddId}) do
         button.BackgroundColor3 = buttonSurface
         button.TextColor3 = text
     end
@@ -1978,6 +2186,8 @@ applyTheme = function()
     end
     themeCards(List)
     themeCards(SavedList)
+    themeCards(FavoritesList)
+    themeCards(RecentList)
 end
 
 applyTheme()
