@@ -4,7 +4,6 @@
 
     INCLUDED FROM GAZE:
     • Roblox Catalog Emotes
-    • Saved emotes
     • Search / Saved search
     • Refresh
     • Sort: Relevance / Price / Favorites / Recent / Bestselling
@@ -14,7 +13,6 @@
     • Copy Animation ID
     • Pause / Resume playback
     • Compact playback HUD with progress
-    • Save / Remove saved emotes
     • Favorite toggle with immediate/persistent refresh
     • Trending preset
     • Search history
@@ -124,8 +122,6 @@ local State = {
     Loading = false,
     RequestId = 0,
 
-    Saved = {},
-    SavedSet = {},
     Favorites = {},
     FavoriteSet = {},
     Recent = {},
@@ -135,7 +131,6 @@ local State = {
 }
 
 local PAGE_SIZE = 10
-local SAVE_FILE = "SaikiEmotes_GazeSaved.json"
 local MAX_RECENT = 20
 local MAX_SEARCH_HISTORY = 8
 
@@ -225,14 +220,6 @@ end
 --==============================================================
 -- PERSISTENT SAVED / FAVORITE / RECENT EMOTES
 --==============================================================
-local function rebuildSavedSet()
-    State.SavedSet = {}
-    for _, item in ipairs(State.Saved) do
-        local id = numericId(item.Id or item.AssetId)
-        if id then State.SavedSet[id] = true end
-    end
-end
-
 local function rebuildFavoriteSet()
     State.FavoriteSet = {}
     for _, item in ipairs(State.Favorites) do
@@ -279,73 +266,50 @@ local function clearSearchHistory()
 end
 
 local function loadSaved()
-    State.Saved = {}
     State.Favorites = {}
     State.Recent = {}
     State.SearchHistory = {}
 
     pcall(function()
-        if type(isfile) ~= "function" or not isfile(SAVE_FILE)
+        if type(isfile) ~= "function" or not isfile("SaikiEmotes_GazeSaved.json")
             or type(readfile) ~= "function" then
             return
         end
 
-        local decoded = HttpService:JSONDecode(readfile(SAVE_FILE))
+        local decoded = HttpService:JSONDecode(readfile("SaikiEmotes_GazeSaved.json"))
         if type(decoded) ~= "table" then return end
 
-        -- Backward compatible with v16's plain saved-emote array.
-        if #decoded > 0 then
-            for _, item in ipairs(decoded) do
-                local normalized = normalizeEmote(item)
-                if normalized then table.insert(State.Saved, normalized) end
-            end
-        else
-            for _, item in ipairs(decoded.saved or {}) do
-                local normalized = normalizeEmote(item)
-                if normalized then table.insert(State.Saved, normalized) end
-            end
-            for _, item in ipairs(decoded.favorites or {}) do
-                local normalized = normalizeEmote(item)
-                if normalized then table.insert(State.Favorites, normalized) end
-            end
-            for _, item in ipairs(decoded.recent or {}) do
-                local normalized = normalizeEmote(item)
-                if normalized then table.insert(State.Recent, normalized) end
-            end
-            for _, item in ipairs(decoded.searchHistory or {}) do
-                local q = tostring(item or "")
-                if q ~= "" then table.insert(State.SearchHistory, q) end
-            end
+        -- Favorites/recent/search history use the existing file so older data is preserved.
+        -- Old v16 plain saved-emote arrays are intentionally ignored because Saved is removed.
+        for _, item in ipairs(decoded.favorites or {}) do
+            local normalized = normalizeEmote(item)
+            if normalized then table.insert(State.Favorites, normalized) end
+        end
+        for _, item in ipairs(decoded.recent or {}) do
+            local normalized = normalizeEmote(item)
+            if normalized then table.insert(State.Recent, normalized) end
+        end
+        for _, item in ipairs(decoded.searchHistory or {}) do
+            local q = tostring(item or "")
+            if q ~= "" then table.insert(State.SearchHistory, q) end
         end
     end)
 
-    rebuildSavedSet()
     rebuildFavoriteSet()
 end
 
 saveData = function()
-    rebuildSavedSet()
     rebuildFavoriteSet()
 
     pcall(function()
         if type(writefile) == "function" then
-            writefile(SAVE_FILE, HttpService:JSONEncode({
-                saved = State.Saved,
+            writefile("SaikiEmotes_GazeSaved.json", HttpService:JSONEncode({
                 favorites = State.Favorites,
                 recent = State.Recent,
                 searchHistory = State.SearchHistory,
             }))
         end
     end)
-end
-
-local function findSaved(id)
-    id = numericId(id)
-    for i,item in ipairs(State.Saved) do
-        if numericId(item.Id or item.AssetId) == id then
-            return i,item
-        end
-    end
 end
 
 local function findFavorite(id)
@@ -355,26 +319,6 @@ local function findFavorite(id)
             return i,item
         end
     end
-end
-
-local function addSaved(item)
-    local normalized = normalizeEmote(item)
-    if not normalized then return end
-    if findSaved(normalized.Id) then
-        toast("Already saved")
-        return
-    end
-    table.insert(State.Saved, normalized)
-    saveData()
-    toast("Saved • " .. normalized.Name)
-end
-
-local function removeSaved(id)
-    local index = findSaved(id)
-    if not index then return end
-    table.remove(State.Saved, index)
-    saveData()
-    toast("Removed from Saved")
 end
 
 local function addFavorite(item)
@@ -732,10 +676,9 @@ end)
 -- TAB BAR
 --==============================================================
 local CatalogTab = makeButton(Main,"CATALOG",UDim2.fromOffset(10,64),UDim2.fromOffset(88,28))
-local SavedTab = makeButton(Main,"SAVED",UDim2.fromOffset(103,64),UDim2.fromOffset(82,28))
-local FavoritesTab = makeButton(Main,"FAVORITES",UDim2.fromOffset(190,64),UDim2.fromOffset(96,28))
-local RecentTab = makeButton(Main,"RECENT",UDim2.fromOffset(291,64),UDim2.fromOffset(82,28))
-local SettingsTab = makeButton(Main,"SETTINGS",UDim2.fromOffset(378,64),UDim2.fromOffset(102,28))
+local FavoritesTab = makeButton(Main,"FAVORITES",UDim2.fromOffset(103,64),UDim2.fromOffset(96,28))
+local RecentTab = makeButton(Main,"RECENT",UDim2.fromOffset(204,64),UDim2.fromOffset(82,28))
+local SettingsTab = makeButton(Main,"SETTINGS",UDim2.fromOffset(291,64),UDim2.fromOffset(102,28))
 
 --==============================================================
 -- CATALOG TOP CONTROLS
@@ -921,65 +864,6 @@ corner(PageBox,9)
 stroke(PageBox,Color3.fromRGB(220,205,230),1,0.15)
 
 local Next = makeButton(CatalogFrame,"NEXT ›",UDim2.new(1,-85,1,-29),UDim2.fromOffset(85,28))
-
---==============================================================
--- SAVED FRAME
---==============================================================
-local SavedFrame = create("Frame", {
-    Size = UDim2.new(1,-20,1,-102),
-    Position = UDim2.fromOffset(10,98),
-    BackgroundTransparency = 1,
-    Visible = false,
-    ZIndex = 5,
-}, Main)
-
-local SavedSearch = create("TextBox", {
-    Size = UDim2.new(1,-95,0,29),
-    Position = UDim2.fromOffset(0,0),
-    BackgroundColor3 = Color3.fromRGB(255,255,255),
-    BorderSizePixel = 0,
-    PlaceholderText = "    Search saved...",
-    Text = "",
-    ClearTextOnFocus = false,
-    TextColor3 = Color3.fromRGB(55,47,65),
-    PlaceholderColor3 = Color3.fromRGB(130,120,140),
-    Font = Enum.Font.Gotham,
-    TextSize = 11,
-    ZIndex = 6,
-}, SavedFrame)
-corner(SavedSearch,9)
-stroke(SavedSearch,Color3.fromRGB(220,205,230),1,0.15)
-
-local SavedSearchIcon = create("ImageLabel", {
-    Size = UDim2.fromOffset(16,16),
-    Position = UDim2.fromOffset(8,7),
-    BackgroundTransparency = 1,
-    Image = SEARCH_BLACK,
-    ScaleType = Enum.ScaleType.Fit,
-    ZIndex = 8,
-}, SavedFrame)
-
-local SavedAddId = makeButton(SavedFrame,"+ ID",UDim2.new(1,-62,0,0),UDim2.fromOffset(62,29))
-
-local SavedList = create("ScrollingFrame", {
-    Size = UDim2.new(1,0,1,-35),
-    Position = UDim2.fromOffset(0,35),
-    BackgroundColor3 = Color3.fromRGB(255,255,255),
-    BackgroundTransparency = 0.05,
-    BorderSizePixel = 0,
-    ScrollBarThickness = 4,
-    ScrollBarImageColor3 = Color3.fromRGB(195,165,210),
-    AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    CanvasSize = UDim2.new(),
-}, SavedFrame)
-corner(SavedList,11)
-stroke(SavedList,Color3.fromRGB(220,205,230),1,0.15)
-
-local SavedGrid = create("UIGridLayout", {
-    CellSize = UDim2.fromOffset(151,72),
-    CellPadding = UDim2.fromOffset(7,7),
-    HorizontalAlignment = Enum.HorizontalAlignment.Center,
-}, SavedList)
 
 --==============================================================
 -- FAVORITES / RECENT FRAMES
@@ -1592,10 +1476,10 @@ end
 -- CARD RENDERING
 --==============================================================
 local CatalogCards = {}
-local SavedCards = {}
 local FavoriteCards = {}
 local RecentCards = {}
 local renderSerial = 0
+local renderFavorites
 
 local function clearCardTable(tbl)
     for _,card in pairs(tbl) do
@@ -1606,7 +1490,7 @@ local function clearCardTable(tbl)
     table.clear(tbl)
 end
 
-local function createEmoteCard(item, parent, cardTable, savedMode)
+local function createEmoteCard(item, parent, cardTable)
     local id = numericId(item.Id or item.id or item.AssetId or item.assetId)
     if not id then return end
 
@@ -1672,13 +1556,6 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
     play.AutoButtonColor = true
     play.ZIndex = 8
 
-    local save = makeButton(card, savedMode and "REMOVE" or "SAVE", UDim2.fromOffset(106,43), UDim2.fromOffset(42,23))
-    save.TextSize = savedMode and 6 or 7
-    save.BackgroundTransparency = 0
-    save.BackgroundColor3 = Color3.fromRGB(255,248,253)
-    save.AutoButtonColor = true
-    save.ZIndex = 8
-
     local favorite = makeButton(card, State.FavoriteSet[id] and "★" or "☆", UDim2.fromOffset(126,5), UDim2.fromOffset(19,19))
     favorite.TextSize = 12
     favorite.BackgroundTransparency = 0.08
@@ -1704,8 +1581,8 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
         rebuildFavoriteSet()
         favorite.Text = State.FavoriteSet[id] and "★" or "☆"
         task.defer(function()
-            if refreshCollectionViews then
-                refreshCollectionViews()
+            if renderFavorites then
+                renderFavorites("")
             end
         end)
     end)
@@ -1718,38 +1595,11 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
         end
     end)
 
-    save.MouseButton1Click:Connect(function()
-        -- Use the actual saved set instead of the card's original mode.
-        -- This keeps the button correct even after saving from CATALOG.
-        if findSaved(id) then
-            removeSaved(id)
-            save.Text = "SAVE"
-            save.TextSize = 7
-        else
-            addSaved({
-                Id=id,
-                AssetId=assetId,
-                Name=name,
-            })
-            save.Text = "REMOVE"
-            save.TextSize = 6
-        end
-
-        task.defer(function()
-            if refreshCollectionViews then
-                refreshCollectionViews()
-            end
-        end)
-    end)
-
     table.insert(cardTable,card)
 end
 
--- forward declaration for callbacks
-local renderSaved
-local renderFavorites
+-- renderFavorites is forward-declared above createEmoteCard.
 local renderRecent
-local refreshCollectionViews
 
 --==============================================================
 -- CATALOG RENDER / PAGINATION
@@ -1775,7 +1625,7 @@ local function renderCatalogPage(pageObject,pageNumber)
     local count = 0
     for _,item in ipairs(current) do
         if serial ~= renderSerial then return end
-        createEmoteCard(item,List,CatalogCards,false)
+        createEmoteCard(item,List,CatalogCards)
         count += 1
         if count % 5 == 0 then
             RunService.RenderStepped:Wait()
@@ -1816,7 +1666,7 @@ loadCatalog = function(keyword)
             HttpCursor = result.nextCursor
             clearCardTable(CatalogCards)
             for _,item in ipairs(result.data) do
-                createEmoteCard(item,List,CatalogCards,false)
+                createEmoteCard(item,List,CatalogCards)
             end
             EmptyLabel.Visible = #result.data == 0
             EmptyLabel.Text = "No emotes found"
@@ -1844,7 +1694,7 @@ loadCatalog = function(keyword)
             HttpCursor = page.nextCursor
             clearCardTable(CatalogCards)
             for _,item in ipairs(page.data) do
-                createEmoteCard(item,List,CatalogCards,false)
+                createEmoteCard(item,List,CatalogCards)
             end
             EmptyLabel.Visible = #page.data == 0
             EmptyLabel.Text = "No emotes found"
@@ -1875,7 +1725,7 @@ local function nextPage()
             State.Page += 1
             clearCardTable(CatalogCards)
             for _,item in ipairs(page.data) do
-                createEmoteCard(item,List,CatalogCards,false)
+                createEmoteCard(item,List,CatalogCards)
             end
             EmptyLabel.Visible = #page.data == 0
             EmptyLabel.Text = "No emotes found"
@@ -1919,7 +1769,7 @@ local function previousPage()
             State.Page -= 1
             clearCardTable(CatalogCards)
             for _,item in ipairs(page.data) do
-                createEmoteCard(item,List,CatalogCards,false)
+                createEmoteCard(item,List,CatalogCards)
             end
             EmptyLabel.Visible = #page.data == 0
             EmptyLabel.Text = "No emotes found"
@@ -1944,54 +1794,33 @@ local function previousPage()
     end)
 end
 
---==============================================================
--- SAVED RENDER
---==============================================================
-renderSaved = function(keyword)
-    clearCardTable(SavedCards)
-    local q = tostring(keyword or ""):lower()
-
-    local count = 0
-    for _,item in ipairs(State.Saved) do
-        if q == "" or tostring(item.Name or ""):lower():find(q,1,true) then
-            createEmoteCard(item,SavedList,SavedCards,true)
-            count += 1
-        end
-    end
-
-    if count == 0 then
-        -- simple empty marker
-        local empty = SavedList:FindFirstChild("SavedEmpty")
-        if not empty then
-            empty = create("TextLabel", {
-                Name = "SavedEmpty",
-                Size = UDim2.new(1,-20,0,30),
-                Position = UDim2.new(0,10,0.5,-15),
-                BackgroundTransparency = 1,
-                Text = "No saved emotes",
-                Font = Enum.Font.GothamBold,
-                TextSize = 13,
-                TextColor3 = Color3.fromRGB(115,105,125),
-                ZIndex = 8,
-            }, SavedList)
-        end
-        empty.Visible = true
-    else
-        local empty = SavedList:FindFirstChild("SavedEmpty")
-        if empty then empty.Visible = false end
-    end
-end
-
 local function renderSimpleCollection(list, cards, items, emptyText)
     clearCardTable(cards)
     for _,item in ipairs(items) do
-        createEmoteCard(item, list, cards, false)
+        createEmoteCard(item, list, cards)
     end
-    local empty = list:FindFirstChild("CollectionEmpty")
+
+    -- The grid owns all children of the ScrollingFrame, so the empty-state label
+    -- must live on the parent frame instead of inside the grid.
+    local host = list.Parent
+    local empty = host and host:FindFirstChild("CollectionEmpty")
     if #items == 0 then
         if not empty then
-            empty = create("TextLabel", {Name="CollectionEmpty",Size=UDim2.new(1,-20,0,30),Position=UDim2.new(0,10,0.5,-15),BackgroundTransparency=1,Text=emptyText,Font=Enum.Font.GothamBold,TextSize=13,TextColor3=Color3.fromRGB(115,105,125),ZIndex=8}, list)
+            empty = create("TextLabel", {
+                Name = "CollectionEmpty",
+                Size = UDim2.new(1,-20,0,34),
+                Position = UDim2.new(0,10,0.5,-17),
+                BackgroundTransparency = 1,
+                Text = emptyText,
+                Font = Enum.Font.GothamBold,
+                TextSize = 13,
+                TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(115,105,125),
+                TextXAlignment = Enum.TextXAlignment.Center,
+                ZIndex = 20,
+            }, host)
         end
+        empty.Text = emptyText
+        empty.TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(115,105,125)
         empty.Visible = true
     elseif empty then
         empty.Visible = false
@@ -2016,20 +1845,6 @@ renderRecent = function(keyword)
     renderSimpleCollection(RecentList,RecentCards,items,"No recently played emotes")
 end
 
--- Refresh only the local collection views. This is intentionally separate from
--- catalog loading so favoriting/saving never causes a Roblox catalog request.
-refreshCollectionViews = function()
-    rebuildSavedSet()
-    rebuildFavoriteSet()
-
-    if State.Tab == "Saved" then
-        renderSaved(SavedSearch.Text or "")
-    elseif State.Tab == "Favorites" then
-        renderFavorites("")
-    elseif State.Tab == "Recent" then
-        renderRecent("")
-    end
-end
 
 --==============================================================
 -- CUSTOM ID
@@ -2099,7 +1914,6 @@ local function addCustomId()
             AnimationId="rbxassetid://"..tostring(id),
         }
 
-        addSaved(custom)
         State.Selected = custom
         playEmote(id,custom.Name)
         overlay:Destroy()
@@ -2118,8 +1932,10 @@ end
 RefreshButton.MouseButton1Click:Connect(function()
     if State.Tab == "Catalog" then
         loadCatalog(Search.Text or "")
-    else
-        renderSaved(SavedSearch.Text or "")
+    elseif State.Tab == "Favorites" then
+        renderFavorites("")
+    elseif State.Tab == "Recent" then
+        renderRecent("")
     end
 end)
 
@@ -2159,7 +1975,6 @@ SearchHistoryClear.MouseButton1Click:Connect(function()
 end)
 
 AddIdButton.MouseButton1Click:Connect(addCustomId)
-SavedAddId.MouseButton1Click:Connect(addCustomId)
 
 Prev.MouseButton1Click:Connect(previousPage)
 Next.MouseButton1Click:Connect(nextPage)
@@ -2180,10 +1995,6 @@ Search.FocusLost:Connect(function(enter)
             SearchHistoryFrame.Visible = false
         end
     end)
-end)
-
-SavedSearch:GetPropertyChangedSignal("Text"):Connect(function()
-    renderSaved(SavedSearch.Text or "")
 end)
 
 PageBox.FocusLost:Connect(function(enter)
@@ -2224,22 +2035,19 @@ setTab = function(tab)
     State.Tab = tab
 
     CatalogFrame.Visible = tab == "Catalog"
-    SavedFrame.Visible = tab == "Saved"
     FavoritesFrame.Visible = tab == "Favorites"
     RecentFrame.Visible = tab == "Recent"
     SettingsFrame.Visible = tab == "Settings"
 
     local tabOn = State.Dark and Color3.fromRGB(76,55,82) or Color3.fromRGB(235,220,245)
     local tabOff = State.Dark and Color3.fromRGB(42,37,49) or Color3.fromRGB(255,248,253)
-    for _,entry in ipairs({{CatalogTab,"Catalog"},{SavedTab,"Saved"},{FavoritesTab,"Favorites"},{RecentTab,"Recent"},{SettingsTab,"Settings"}}) do
+    for _,entry in ipairs({{CatalogTab,"Catalog"},{FavoritesTab,"Favorites"},{RecentTab,"Recent"},{SettingsTab,"Settings"}}) do
         entry[1].BackgroundColor3 = tab == entry[2] and tabOn or tabOff
     end
     local tabText = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(55,47,65)
-    CatalogTab.TextColor3 = tabText; SavedTab.TextColor3 = tabText; FavoritesTab.TextColor3 = tabText; RecentTab.TextColor3 = tabText; SettingsTab.TextColor3 = tabText
+    CatalogTab.TextColor3 = tabText; FavoritesTab.TextColor3 = tabText; RecentTab.TextColor3 = tabText; SettingsTab.TextColor3 = tabText
 
-    if tab == "Saved" then
-        renderSaved(SavedSearch.Text or "")
-    elseif tab == "Favorites" then
+    if tab == "Favorites" then
         renderFavorites("")
     elseif tab == "Recent" then
         renderRecent("")
@@ -2247,7 +2055,6 @@ setTab = function(tab)
 end
 
 CatalogTab.MouseButton1Click:Connect(function() setTab("Catalog") end)
-SavedTab.MouseButton1Click:Connect(function() setTab("Saved") end)
 FavoritesTab.MouseButton1Click:Connect(function() setTab("Favorites") end)
 RecentTab.MouseButton1Click:Connect(function() setTab("Recent") end)
 SettingsTab.MouseButton1Click:Connect(function() setTab("Settings") end)
@@ -2487,12 +2294,7 @@ applyTheme = function()
     Search.BackgroundTransparency = dark and 0.02 or 0
     Search.TextColor3 = text
     Search.PlaceholderColor3 = muted
-    SavedSearch.BackgroundColor3 = surface
-    SavedSearch.BackgroundTransparency = dark and 0.02 or 0
-    SavedSearch.TextColor3 = text
-    SavedSearch.PlaceholderColor3 = muted
     List.BackgroundColor3 = listSurface
-    SavedList.BackgroundColor3 = listSurface
     PlaybackHUD.BackgroundColor3 = buttonSurface
     PlaybackName.TextColor3 = text
     PlaybackTime.TextColor3 = muted
@@ -2502,9 +2304,8 @@ applyTheme = function()
     SearchIcon.Image = dark and SEARCH_WHITE or SEARCH_BLACK
     SearchHistoryFrame.BackgroundColor3 = surface
     SearchHistoryTitle.TextColor3 = muted
-    SavedSearchIcon.Image = dark and SEARCH_WHITE or SEARCH_BLACK
 
-    for _,button in ipairs({CatalogTab,SavedTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,TrendButton,AddIdButton,SearchClear,SearchHistoryClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,SavedAddId,PlaybackPause,PlaybackStop}) do
+    for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,TrendButton,AddIdButton,SearchClear,SearchHistoryClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop}) do
         button.BackgroundColor3 = buttonSurface
         button.TextColor3 = text
     end
@@ -2532,9 +2333,14 @@ applyTheme = function()
         end
     end
     themeCards(List)
-    themeCards(SavedList)
     themeCards(FavoritesList)
     themeCards(RecentList)
+    for _,container in ipairs({FavoritesFrame,RecentFrame}) do
+        local empty = container:FindFirstChild("CollectionEmpty")
+        if empty and empty:IsA("TextLabel") then
+            empty.TextColor3 = dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(115,105,125)
+        end
+    end
 end
 
 applyTheme()
