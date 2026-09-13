@@ -1,5 +1,5 @@
 --[[
-    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V29 PLAYBACK CONTROLS
+    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V31 CATALOG UPGRADE
     Compact rebuild based on the supplied GazeOld + Saiki Music references.
 
     INCLUDED FROM GAZE:
@@ -14,8 +14,10 @@
     • Pause / Resume playback
     • Compact playback HUD with clickable progress / loop control
     • Favorite toggle with immediate/persistent refresh
-    • Trending preset
     • Search history
+    • Catalog loading / retry state
+    • Catalog request de-duplication
+    • Catalog result count
     • Clear search button
     • Custom Animation ID
     • Speed
@@ -121,6 +123,7 @@ local State = {
 
     Loading = false,
     RequestId = 0,
+    LastCompletedRequest = 0,
 
     Favorites = {},
     FavoriteSet = {},
@@ -842,6 +845,19 @@ local EmptyLabel = create("TextLabel", {
     Visible = false,
     ZIndex = 8,
 }, List)
+
+local CatalogStatus = create("TextLabel", {
+    Size = UDim2.new(1,-20,0,22),
+    Position = UDim2.fromOffset(10,4),
+    BackgroundTransparency = 1,
+    Text = "",
+    Font = Enum.Font.GothamMedium,
+    TextSize = 8,
+    TextColor3 = Color3.fromRGB(130,120,140),
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Visible = false,
+    ZIndex = 9,
+}, CatalogFrame)
 
 local Prev = makeButton(CatalogFrame,"‹ PREV",UDim2.fromOffset(0,0),UDim2.fromOffset(85,28))
 Prev.Position = UDim2.new(0,0,1,-29)
@@ -1701,6 +1717,25 @@ local renderRecent
 --==============================================================
 -- CATALOG RENDER / PAGINATION
 --==============================================================
+local function setCatalogStatus(text,visible)
+    CatalogStatus.Text = tostring(text or "")
+    CatalogStatus.Visible = visible == true
+end
+
+local function renderHttpCatalogPage(page,pageNumber)
+    clearCardTable(CatalogCards)
+    local items = page and page.data or {}
+    for _,item in ipairs(items) do
+        createEmoteCard(item,List,CatalogCards)
+    end
+    EmptyLabel.Text = "No emotes found"
+    EmptyLabel.Visible = #items == 0
+    PageBox.Text = "Page " .. tostring(pageNumber)
+    Prev.Active = pageNumber > 1
+    Next.Active = page and page.nextCursor ~= nil
+    setCatalogStatus(#items > 0 and (tostring(#items) .. " emotes") or "No results",true)
+end
+
 local function renderCatalogPage(pageObject,pageNumber)
     renderSerial += 1
     local serial = renderSerial
@@ -1716,6 +1751,9 @@ local function renderCatalogPage(pageObject,pageNumber)
         EmptyLabel.Text = "No emotes found"
         EmptyLabel.Visible = true
         PageBox.Text = "Page " .. tostring(pageNumber)
+        Prev.Active = pageNumber > 1
+        Next.Active = false
+        setCatalogStatus("No results",true)
         return
     end
 
@@ -1732,13 +1770,20 @@ local function renderCatalogPage(pageObject,pageNumber)
     PageBox.Text = "Page " .. tostring(pageNumber)
     Prev.Active = pageNumber > 1
     Next.Active = not pageObject.IsFinished
+    setCatalogStatus(tostring(count) .. " emotes",true)
 end
 
 loadCatalog = function(keyword)
+    local requested = tostring(keyword or "")
+
+    -- Do not start another identical catalog request while one is already running.
+    if State.Loading and State.Search == requested then
+        return
+    end
+
     State.RequestId += 1
     local requestId = State.RequestId
-
-    State.Search = keyword or ""
+    State.Search = requested
     if State.Search ~= "" then addSearchHistory(State.Search) end
     State.Page = 1
     State.CatalogPage = nil
@@ -1750,6 +1795,7 @@ loadCatalog = function(keyword)
     PageBox.Text = "Loading..."
     Prev.Active = false
     Next.Active = false
+    setCatalogStatus("Loading catalog...",true)
     State.Loading = true
 
     task.spawn(function()
@@ -1760,50 +1806,45 @@ loadCatalog = function(keyword)
         if result and result.data then
             HttpMode = true
             State.Loading = false
+            State.LastCompletedRequest = requestId
             HttpCursor = result.nextCursor
-            clearCardTable(CatalogCards)
-            for _,item in ipairs(result.data) do
-                createEmoteCard(item,List,CatalogCards)
-            end
-            EmptyLabel.Visible = #result.data == 0
-            EmptyLabel.Text = "No emotes found"
-            PageBox.Text = "Page 1"
-            Prev.Active = false
-            Next.Active = result.nextCursor ~= nil
+            renderHttpCatalogPage(result,1)
             return
         end
 
         if result then
             State.CatalogPage = result
             State.Loading = false
+            State.LastCompletedRequest = requestId
             renderCatalogPage(result,1)
             return
         end
 
-        -- Public catalog fallback if the first route could not be used.
+        -- Last fallback: public HTTP endpoint, keeping the UI responsive while it runs.
         HttpMode = true
         local page = httpCatalog(State.Search,nil)
-        State.Loading = false
 
         if requestId ~= State.RequestId then return end
 
+        State.Loading = false
+        State.LastCompletedRequest = requestId
         if page then
             HttpCursor = page.nextCursor
-            clearCardTable(CatalogCards)
-            for _,item in ipairs(page.data) do
-                createEmoteCard(item,List,CatalogCards)
-            end
-            EmptyLabel.Visible = #page.data == 0
-            EmptyLabel.Text = "No emotes found"
-            PageBox.Text = "Page 1"
-            Prev.Active = false
-            Next.Active = page.nextCursor ~= nil
+            renderHttpCatalogPage(page,1)
         else
             EmptyLabel.Text = "Roblox Store unavailable\nCheck executor HTTP access"
             EmptyLabel.Visible = true
             PageBox.Text = "Page 1"
+            Prev.Active = false
+            Next.Active = false
+            setCatalogStatus("Catalog request failed",true)
         end
     end)
+end
+
+local function retryCatalog()
+    if State.Loading then return end
+    loadCatalog(State.Search or "")
 end
 
 local function nextPage()
@@ -1820,15 +1861,7 @@ local function nextPage()
             table.insert(HttpPrevCursors,oldCursor)
             HttpCursor = page.nextCursor
             State.Page += 1
-            clearCardTable(CatalogCards)
-            for _,item in ipairs(page.data) do
-                createEmoteCard(item,List,CatalogCards)
-            end
-            EmptyLabel.Visible = #page.data == 0
-            EmptyLabel.Text = "No emotes found"
-            PageBox.Text = "Page " .. tostring(State.Page)
-            Prev.Active = State.Page > 1
-            Next.Active = page.nextCursor ~= nil
+            renderHttpCatalogPage(page,State.Page)
         end
         return
     end
@@ -1846,6 +1879,7 @@ local function nextPage()
         State.Page += 1
         renderCatalogPage(p,State.Page)
     else
+        setCatalogStatus("Could not load page • click Refresh",true)
         toast("Could not load next page")
     end
 end
@@ -1864,15 +1898,7 @@ local function previousPage()
         if page then
             HttpCursor = page.nextCursor
             State.Page -= 1
-            clearCardTable(CatalogCards)
-            for _,item in ipairs(page.data) do
-                createEmoteCard(item,List,CatalogCards)
-            end
-            EmptyLabel.Visible = #page.data == 0
-            EmptyLabel.Text = "No emotes found"
-            PageBox.Text = "Page " .. tostring(State.Page)
-            Prev.Active = State.Page > 1
-            Next.Active = page.nextCursor ~= nil
+            renderHttpCatalogPage(page,State.Page)
         end
         return
     end
@@ -2432,6 +2458,7 @@ applyTheme = function()
     PlaybackHUD.BackgroundColor3 = buttonSurface
     PlaybackName.TextColor3 = text
     PlaybackTime.TextColor3 = muted
+    CatalogStatus.TextColor3 = muted
     PlaybackProgress.BackgroundColor3 = dark and Color3.fromRGB(62,55,68) or Color3.fromRGB(232,224,238)
     PageBox.BackgroundColor3 = surface
     PageBox.TextColor3 = text
