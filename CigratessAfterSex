@@ -1,5 +1,5 @@
 --[[
-    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V28 COLLECTION TOOLS
+    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V29 PLAYBACK CONTROLS
     Compact rebuild based on the supplied GazeOld + Saiki Music references.
 
     INCLUDED FROM GAZE:
@@ -12,7 +12,7 @@
     • Play / Stop
     • Copy Animation ID
     • Pause / Resume playback
-    • Compact playback HUD with progress
+    • Compact playback HUD with clickable progress / loop control
     • Favorite toggle with immediate/persistent refresh
     • Trending preset
     • Search history
@@ -1009,6 +1009,9 @@ local function addSettingToggle(name, key)
     toggle.MouseButton1Click:Connect(function()
         Settings[key] = not Settings[key]
         refresh()
+        if key == "Looped" and State.CurrentTrack then
+            pcall(function() State.CurrentTrack.Looped = Settings.Looped end)
+        end
     end)
 
     refresh()
@@ -1228,9 +1231,13 @@ corner(PlaybackFill,3)
 local PlaybackPause = makeButton(PlaybackHUD,"▶",UDim2.fromOffset(205,12),UDim2.fromOffset(38,30))
 PlaybackPause.TextSize = 11
 PlaybackPause.ZIndex = 92
-local PlaybackStop = makeButton(PlaybackHUD,"■",UDim2.fromOffset(248,12),UDim2.fromOffset(50,30))
+local PlaybackStop = makeButton(PlaybackHUD,"■",UDim2.fromOffset(246,12),UDim2.fromOffset(34,30))
 PlaybackStop.TextSize = 10
 PlaybackStop.ZIndex = 92
+
+local PlaybackLoop = makeButton(PlaybackHUD,"LOOP",UDim2.fromOffset(284,12),UDim2.fromOffset(22,30))
+PlaybackLoop.TextSize = 5.5
+PlaybackLoop.ZIndex = 92
 
 local function formatPlaybackTime(seconds)
     seconds = math.max(0, tonumber(seconds) or 0)
@@ -1247,6 +1254,7 @@ local function setPlaybackHUD(track, name)
     PlaybackHUD.Visible = true
     PlaybackName.Text = tostring(name or "Emote")
     PlaybackPause.Text = State.Paused and "▶" or "Ⅱ"
+    PlaybackLoop.Text = Settings.Looped and "LOOP" or "ONCE"
 end
 
 PlaybackPause.MouseButton1Click:Connect(function()
@@ -1274,6 +1282,54 @@ PlaybackStop.MouseButton1Click:Connect(function()
         stopCurrentEmote()
         PlaybackHUD.Visible = false
         toast("Emote stopped")
+    end
+end)
+
+PlaybackLoop.MouseButton1Click:Connect(function()
+    Settings.Looped = not Settings.Looped
+    PlaybackLoop.Text = Settings.Looped and "LOOP" or "ONCE"
+    local track = State.CurrentTrack
+    if track then
+        pcall(function() track.Looped = Settings.Looped end)
+    end
+    toast(Settings.Looped and "Loop enabled" or "Loop disabled")
+end)
+
+local PlaybackSeek = create("TextButton", {
+    Size = UDim2.new(0,185,0,18),
+    Position = UDim2.fromOffset(12,36),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    Text = "",
+    AutoButtonColor = false,
+    Active = true,
+    ZIndex = 93,
+}, PlaybackHUD)
+
+local function seekPlayback(input)
+    local track = State.CurrentTrack
+    if not track then return end
+    local length = tonumber(track.Length) or 0
+    if length <= 0 then
+        toast("Emote is still loading")
+        return
+    end
+
+    local x = math.clamp(
+        (input.Position.X - PlaybackProgress.AbsolutePosition.X) /
+        math.max(1, PlaybackProgress.AbsoluteSize.X),
+        0,1
+    )
+    pcall(function()
+        track.TimePosition = x * length
+    end)
+    Settings.TimePosition = x
+end
+
+PlaybackSeek.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        seekPlayback(input)
     end
 end)
 
@@ -2287,6 +2343,7 @@ RunService.RenderStepped:Connect(function()
 
     PlaybackHUD.Visible = true
     PlaybackPause.Text = State.Paused and "▶" or "Ⅱ"
+    PlaybackLoop.Text = Settings.Looped and "LOOP" or "ONCE"
 
     local length = 0
     local position = 0
@@ -2388,7 +2445,7 @@ applyTheme = function()
     RecentSearch.TextColor3 = text
     RecentSearch.PlaceholderColor3 = muted
 
-    for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,AddIdButton,SearchClear,SearchHistoryClear,FavoritesClear,RecentClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop}) do
+    for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,AddIdButton,SearchClear,SearchHistoryClear,FavoritesClear,RecentClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop,PlaybackLoop}) do
         button.BackgroundColor3 = buttonSurface
         button.TextColor3 = text
     end
