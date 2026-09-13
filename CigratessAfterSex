@@ -1,5 +1,5 @@
 --[[
-    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V26
+    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V27 FAVORITES FIX
     Compact rebuild based on the supplied GazeOld + Saiki Music references.
 
     INCLUDED FROM GAZE:
@@ -14,6 +14,7 @@
     • Pause / Resume playback
     • Compact playback HUD with progress
     • Favorite toggle with immediate/persistent refresh
+    • Trending preset
     • Search history
     • Clear search button
     • Custom Animation ID
@@ -30,7 +31,7 @@
     • Draggable header
     • Resizable window
     • R6-safe behavior
-    • Persistent favorites/recent data when executor file APIs exist
+    • Persistent saved emotes when executor file APIs exist
 
     SAIKI:
     • Smaller compact UI
@@ -219,6 +220,14 @@ end
 --==============================================================
 -- PERSISTENT SAVED / FAVORITE / RECENT EMOTES
 --==============================================================
+local function rebuildFavoriteSet()
+    State.FavoriteSet = {}
+    for _, item in ipairs(State.Favorites) do
+        local id = numericId(item.Id or item.AssetId)
+        if id then State.FavoriteSet[id] = true end
+    end
+end
+
 local function normalizeEmote(item)
     if type(item) ~= "table" then return nil end
     local id = numericId(item.Id or item.id or item.AssetId or item.assetId)
@@ -230,25 +239,6 @@ local function normalizeEmote(item)
         Name = tostring(item.Name or item.name or ("Emote " .. id)),
         AnimationId = item.AnimationId or ("rbxassetid://" .. tostring(assetId)),
     }
-end
-
-local function rebuildFavoriteSet()
-    -- V25: FavoriteSet is now the canonical in-memory favorite store.
-    -- The old Favorites array is kept only as the persistence format.
-    State.FavoriteSet = {}
-    local normalizedFavorites = {}
-    local seen = {}
-
-    for _, item in ipairs(State.Favorites or {}) do
-        local normalized = normalizeEmote(item)
-        if normalized and not seen[normalized.Id] then
-            seen[normalized.Id] = true
-            State.FavoriteSet[normalized.Id] = normalized
-            table.insert(normalizedFavorites, normalized)
-        end
-    end
-
-    State.Favorites = normalizedFavorites
 end
 
 local saveData
@@ -277,7 +267,6 @@ end
 
 local function loadSaved()
     State.Favorites = {}
-    State.FavoriteSet = {}
     State.Recent = {}
     State.SearchHistory = {}
 
@@ -290,11 +279,9 @@ local function loadSaved()
         local decoded = HttpService:JSONDecode(readfile("SaikiEmotes_GazeSaved.json"))
         if type(decoded) ~= "table" then return end
 
-        local storedFavorites = decoded.favorites
-        if type(storedFavorites) ~= "table" then storedFavorites = decoded.Favorites end
-        if type(storedFavorites) ~= "table" then storedFavorites = decoded.favoriteEmotes end
-        if type(storedFavorites) ~= "table" then storedFavorites = {} end
-        for _, item in ipairs(storedFavorites) do
+        -- Favorites/recent/search history use the existing file so older data is preserved.
+        -- Old v16 plain saved-emote arrays are intentionally ignored because Saved is removed.
+        for _, item in ipairs(decoded.favorites or {}) do
             local normalized = normalizeEmote(item)
             if normalized then table.insert(State.Favorites, normalized) end
         end
@@ -327,32 +314,26 @@ end
 
 local function findFavorite(id)
     id = numericId(id)
-    if not id then return nil end
-    return State.FavoriteSet[id]
+    for i,item in ipairs(State.Favorites) do
+        if numericId(item.Id or item.AssetId) == id then
+            return i,item
+        end
+    end
 end
 
 local function addFavorite(item)
     local normalized = normalizeEmote(item)
     if not normalized then return end
     if findFavorite(normalized.Id) then return end
-
-    State.FavoriteSet[normalized.Id] = normalized
     table.insert(State.Favorites, normalized)
     saveData()
     toast("Added to Favorites")
 end
 
 local function removeFavorite(id)
-    id = numericId(id)
-    if not id then return end
-    if not State.FavoriteSet[id] then return end
-
-    State.FavoriteSet[id] = nil
-    for i = #State.Favorites, 1, -1 do
-        if numericId(State.Favorites[i].Id or State.Favorites[i].AssetId) == id then
-            table.remove(State.Favorites, i)
-        end
-    end
+    local index = findFavorite(id)
+    if not index then return end
+    table.remove(State.Favorites, index)
     saveData()
     toast("Removed from Favorites")
 end
@@ -360,7 +341,7 @@ end
 local function toggleFavorite(item)
     local id = numericId(item.Id or item.AssetId)
     if not id then return end
-    if State.FavoriteSet[id] then
+    if findFavorite(id) then
         removeFavorite(id)
     else
         addFavorite(item)
@@ -894,28 +875,9 @@ local FavoritesFrame = create("Frame", {
     ZIndex = 5,
 }, Main)
 
-local FavoritesSearch = create("TextBox", {
-    Size = UDim2.new(1,-92,0,29),
-    Position = UDim2.fromOffset(0,0),
-    BackgroundColor3 = Color3.fromRGB(255,255,255),
-    BorderSizePixel = 0,
-    PlaceholderText = "Search favorites...",
-    Text = "",
-    ClearTextOnFocus = false,
-    TextColor3 = Color3.fromRGB(55,47,65),
-    PlaceholderColor3 = Color3.fromRGB(130,120,140),
-    Font = Enum.Font.Gotham,
-    TextSize = 10,
-    ZIndex = 6,
-}, FavoritesFrame)
-corner(FavoritesSearch,9)
-stroke(FavoritesSearch,Color3.fromRGB(220,205,230),1,0.15)
-
-local FavoritesClear = makeButton(FavoritesFrame,"CLEAR",UDim2.new(1,-86,0,0),UDim2.fromOffset(86,29))
-
 local FavoritesList = create("ScrollingFrame", {
-    Size = UDim2.new(1,0,1,-35),
-    Position = UDim2.fromOffset(0,35),
+    Size = UDim2.new(1,0,1,0),
+    Position = UDim2.fromOffset(0,0),
     BackgroundColor3 = Color3.fromRGB(255,255,255),
     BackgroundTransparency = 0.05,
     BorderSizePixel = 0,
@@ -936,27 +898,8 @@ local RecentFrame = create("Frame", {
     Size = UDim2.new(1,-20,1,-102), Position = UDim2.fromOffset(10,98),
     BackgroundTransparency = 1, Visible = false, ZIndex = 5,
 }, Main)
-local RecentSearch = create("TextBox", {
-    Size = UDim2.new(1,-92,0,29),
-    Position = UDim2.fromOffset(0,0),
-    BackgroundColor3 = Color3.fromRGB(255,255,255),
-    BorderSizePixel = 0,
-    PlaceholderText = "Search recent...",
-    Text = "",
-    ClearTextOnFocus = false,
-    TextColor3 = Color3.fromRGB(55,47,65),
-    PlaceholderColor3 = Color3.fromRGB(130,120,140),
-    Font = Enum.Font.Gotham,
-    TextSize = 10,
-    ZIndex = 6,
-}, RecentFrame)
-corner(RecentSearch,9)
-stroke(RecentSearch,Color3.fromRGB(220,205,230),1,0.15)
-
-local RecentClear = makeButton(RecentFrame,"CLEAR",UDim2.new(1,-86,0,0),UDim2.fromOffset(86,29))
-
 local RecentList = create("ScrollingFrame", {
-    Size=UDim2.new(1,0,1,-35), Position=UDim2.fromOffset(0,35),
+    Size=UDim2.new(1,0,1,0), Position=UDim2.fromOffset(0,0),
     BackgroundColor3=Color3.fromRGB(255,255,255), BackgroundTransparency=0.05,
     BorderSizePixel=0, ScrollBarThickness=4, AutomaticCanvasSize=Enum.AutomaticSize.Y,
     CanvasSize=UDim2.new(), ZIndex=5,
@@ -1631,19 +1574,16 @@ local function createEmoteCard(item, parent, cardTable)
     end)
 
     favorite.MouseButton1Click:Connect(function()
-        local favoriteItem = {Id=id, AssetId=assetId, Name=name, AnimationId="rbxassetid://"..tostring(assetId)}
-        toggleFavorite(favoriteItem)
+        toggleFavorite({Id=id, AssetId=assetId, Name=name})
+        -- Rebuild the local set and refresh collection tabs immediately so the
+        -- change is visible without reopening the GUI or restarting the script.
         rebuildFavoriteSet()
         favorite.Text = State.FavoriteSet[id] and "★" or "☆"
-
-        -- If this card belongs to Favorites, redraw it immediately. If it is a
-        -- Catalog card, the Catalog stays intact while the Favorites tab is
-        -- refreshed when opened.
-        if renderFavorites then
-            task.defer(function()
-                renderFavorites(FavoritesSearch.Text or "")
-            end)
-        end
+        task.defer(function()
+            if renderFavorites then
+                renderFavorites("")
+            end
+        end)
     end)
 
     copy.MouseButton1Click:Connect(function()
@@ -1886,54 +1826,22 @@ local function renderSimpleCollection(list, cards, items, emptyText)
     end
 end
 
-local function forceCollectionCanvas(list, grid)
-    task.defer(function()
-        if not list or not list.Parent then return end
-        local content = grid.AbsoluteContentSize
-        list.CanvasSize = UDim2.fromOffset(0, content.Y + 16)
-    end)
-end
-
 renderFavorites = function(keyword)
-    -- Always rebuild from the persisted/in-memory favorite list before rendering.
-    -- This prevents the UI from depending on a stale FavoriteSet.
-    rebuildFavoriteSet()
-
-    local q = tostring(keyword or FavoritesSearch.Text or ""):lower()
+    local q = tostring(keyword or ""):lower()
     local items = {}
-    local seen = {}
-
-    -- Render directly from the canonical FavoriteSet instead of relying on
-    -- the persistence array being in the expected shape/order.
-    for id, normalized in pairs(State.FavoriteSet) do
-        if normalized and not seen[id] then
-            seen[id] = true
-            if q == "" or tostring(normalized.Name):lower():find(q,1,true) then
-                table.insert(items,normalized)
-            end
-        end
+    for _,item in ipairs(State.Favorites) do
+        if q == "" or tostring(item.Name):lower():find(q,1,true) then table.insert(items,item) end
     end
-    table.sort(items, function(a,b)
-        return tostring(a.Name):lower() < tostring(b.Name):lower()
-    end)
-
-    renderSimpleCollection(FavoritesList,FavoritesCards,items,"No favorite emotes")
-    task.defer(function()
-        forceCollectionCanvas(FavoritesList,FavoritesGrid)
-    end)
+    renderSimpleCollection(FavoritesList,FavoriteCards,items,"No favorite emotes")
 end
 
 renderRecent = function(keyword)
-    local q = tostring(keyword or RecentSearch.Text or ""):lower()
+    local q = tostring(keyword or ""):lower()
     local items = {}
     for _,item in ipairs(State.Recent) do
-        local normalized = normalizeEmote(item)
-        if normalized and (q == "" or tostring(normalized.Name):lower():find(q,1,true)) then
-            table.insert(items,normalized)
-        end
+        if q == "" or tostring(item.Name):lower():find(q,1,true) then table.insert(items,item) end
     end
     renderSimpleCollection(RecentList,RecentCards,items,"No recently played emotes")
-    task.defer(function() forceCollectionCanvas(RecentList,RecentGrid) end)
 end
 
 
@@ -2024,9 +1932,9 @@ RefreshButton.MouseButton1Click:Connect(function()
     if State.Tab == "Catalog" then
         loadCatalog(Search.Text or "")
     elseif State.Tab == "Favorites" then
-        renderFavorites(FavoritesSearch.Text or "")
+        renderFavorites("")
     elseif State.Tab == "Recent" then
-        renderRecent(RecentSearch.Text or "")
+        renderRecent("")
     end
 end)
 
@@ -2036,41 +1944,6 @@ SortButton.MouseButton1Click:Connect(function()
     loadCatalog(Search.Text or "")
 end)
 
-
-FavoritesSearch:GetPropertyChangedSignal("Text"):Connect(function()
-    if State.Tab == "Favorites" then
-        renderFavorites(FavoritesSearch.Text or "")
-    end
-end)
-
-FavoritesClear.MouseButton1Click:Connect(function()
-    if #State.Favorites == 0 then
-        toast("Favorites already empty")
-        return
-    end
-    table.clear(State.Favorites)
-    rebuildFavoriteSet()
-    saveData()
-    renderFavorites("")
-    toast("Favorites cleared")
-end)
-
-RecentSearch:GetPropertyChangedSignal("Text"):Connect(function()
-    if State.Tab == "Recent" then
-        renderRecent(RecentSearch.Text or "")
-    end
-end)
-
-RecentClear.MouseButton1Click:Connect(function()
-    if #State.Recent == 0 then
-        toast("Recent list already empty")
-        return
-    end
-    table.clear(State.Recent)
-    saveData()
-    renderRecent("")
-    toast("Recent list cleared")
-end)
 
 SearchClear.MouseButton1Click:Connect(function()
     Search.Text = ""
@@ -2159,11 +2032,11 @@ setTab = function(tab)
     end
     local tabText = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(55,47,65)
     CatalogTab.TextColor3 = tabText; FavoritesTab.TextColor3 = tabText; RecentTab.TextColor3 = tabText; SettingsTab.TextColor3 = tabText
+
     if tab == "Favorites" then
-        rebuildFavoriteSet()
-        renderFavorites(FavoritesSearch.Text or "")
+        renderFavorites("")
     elseif tab == "Recent" then
-        renderRecent(RecentSearch.Text or "")
+        renderRecent("")
     end
 end
 
@@ -2417,13 +2290,8 @@ applyTheme = function()
     SearchIcon.Image = dark and SEARCH_WHITE or SEARCH_BLACK
     SearchHistoryFrame.BackgroundColor3 = surface
     SearchHistoryTitle.TextColor3 = muted
-    for _,box in ipairs({FavoritesSearch,RecentSearch}) do
-        box.BackgroundColor3 = surface
-        box.TextColor3 = text
-        box.PlaceholderColor3 = muted
-    end
 
-    for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,AddIdButton,SearchClear,SearchHistoryClear,FavoritesClear,RecentClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop}) do
+    for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,AddIdButton,SearchClear,SearchHistoryClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop}) do
         button.BackgroundColor3 = buttonSurface
         button.TextColor3 = text
     end
