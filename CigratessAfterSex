@@ -1,5 +1,5 @@
 --[[
-    SAIKI EMOTES — GAZE EDITION + VEX FEATURES
+    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V19
     Compact rebuild based on the supplied GazeOld + Saiki Music references.
 
     INCLUDED FROM GAZE:
@@ -16,6 +16,9 @@
     • Compact playback HUD with progress
     • Save / Remove saved emotes
     • Favorite toggle
+    • Trending preset
+    • Search history
+    • Clear search button
     • Custom Animation ID
     • Speed
     • Time Position
@@ -126,6 +129,7 @@ local State = {
     Favorites = {},
     FavoriteSet = {},
     Recent = {},
+    SearchHistory = {},
 
     GradientTime = 0,
 }
@@ -133,6 +137,7 @@ local State = {
 local PAGE_SIZE = 10
 local SAVE_FILE = "SaikiEmotes_GazeSaved.json"
 local MAX_RECENT = 20
+local MAX_SEARCH_HISTORY = 8
 
 --==============================================================
 -- HELPERS
@@ -249,10 +254,35 @@ local function normalizeEmote(item)
     }
 end
 
+local saveData
+
+local function addSearchHistory(keyword)
+    keyword = tostring(keyword or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if keyword == "" then return end
+
+    for i = #State.SearchHistory, 1, -1 do
+        if tostring(State.SearchHistory[i]):lower() == keyword:lower() then
+            table.remove(State.SearchHistory, i)
+        end
+    end
+
+    table.insert(State.SearchHistory, 1, keyword)
+    while #State.SearchHistory > MAX_SEARCH_HISTORY do
+        table.remove(State.SearchHistory)
+    end
+    saveData()
+end
+
+local function clearSearchHistory()
+    table.clear(State.SearchHistory)
+    saveData()
+end
+
 local function loadSaved()
     State.Saved = {}
     State.Favorites = {}
     State.Recent = {}
+    State.SearchHistory = {}
 
     pcall(function()
         if type(isfile) ~= "function" or not isfile(SAVE_FILE)
@@ -282,6 +312,10 @@ local function loadSaved()
                 local normalized = normalizeEmote(item)
                 if normalized then table.insert(State.Recent, normalized) end
             end
+            for _, item in ipairs(decoded.searchHistory or {}) do
+                local q = tostring(item or "")
+                if q ~= "" then table.insert(State.SearchHistory, q) end
+            end
         end
     end)
 
@@ -289,7 +323,7 @@ local function loadSaved()
     rebuildFavoriteSet()
 end
 
-local function saveData()
+saveData = function()
     rebuildSavedSet()
     rebuildFavoriteSet()
 
@@ -299,6 +333,7 @@ local function saveData()
                 saved = State.Saved,
                 favorites = State.Favorites,
                 recent = State.Recent,
+                searchHistory = State.SearchHistory,
             }))
         end
     end)
@@ -741,9 +776,89 @@ local SearchIcon = create("ImageLabel", {
     ZIndex = 8,
 }, CatalogFrame)
 
-local RefreshButton = makeButton(CatalogFrame,"↻",UDim2.new(1,-182,0,0),UDim2.fromOffset(42,29))
-local SortButton = makeButton(CatalogFrame,"Sort",UDim2.new(1,-134,0,0),UDim2.fromOffset(62,29))
+local loadCatalog
+
+local SearchClear = makeButton(CatalogFrame,"×",UDim2.new(1,-273,0,3),UDim2.fromOffset(24,23))
+SearchClear.TextSize = 14
+SearchClear.BackgroundTransparency = 1
+SearchClear.ZIndex = 10
+
+local SearchHistoryFrame = create("Frame", {
+    Size = UDim2.new(1,-250,0,0),
+    Position = UDim2.fromOffset(0,32),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BorderSizePixel = 0,
+    Visible = false,
+    ZIndex = 40,
+    ClipsDescendants = true,
+}, CatalogFrame)
+corner(SearchHistoryFrame,9)
+stroke(SearchHistoryFrame,Color3.fromRGB(220,205,230),1,0.12)
+
+local SearchHistoryTitle = create("TextLabel", {
+    Size = UDim2.new(1,-56,0,26),
+    Position = UDim2.fromOffset(10,0),
+    BackgroundTransparency = 1,
+    Text = "RECENT SEARCHES",
+    TextColor3 = Color3.fromRGB(110,100,125),
+    Font = Enum.Font.GothamBold,
+    TextSize = 8,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 41,
+}, SearchHistoryFrame)
+
+local SearchHistoryClear = makeButton(SearchHistoryFrame,"CLEAR",UDim2.new(1,-52,0,4),UDim2.fromOffset(44,20))
+SearchHistoryClear.TextSize = 7
+SearchHistoryClear.ZIndex = 42
+
+local SearchHistoryList = create("ScrollingFrame", {
+    Size = UDim2.new(1,-8,1,-30),
+    Position = UDim2.fromOffset(4,28),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 3,
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    CanvasSize = UDim2.new(),
+    ZIndex = 41,
+}, SearchHistoryFrame)
+local SearchHistoryLayout = create("UIListLayout", {
+    Padding = UDim.new(0,2),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+}, SearchHistoryList)
+
+local function renderSearchHistory()
+    for _, child in ipairs(SearchHistoryList:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    local count = 0
+    for _, keyword in ipairs(State.SearchHistory) do
+        count += 1
+        local button = makeButton(SearchHistoryList,keyword,UDim2.new(),UDim2.new(1,0,0,26))
+        button.TextXAlignment = Enum.TextXAlignment.Left
+        button.TextSize = 9
+        button.TextTruncate = Enum.TextTruncate.AtEnd
+        button.BackgroundColor3 = State.Dark and Color3.fromRGB(42,37,49) or Color3.fromRGB(255,248,253)
+        button.TextColor3 = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(55,47,65)
+        button.LayoutOrder = count
+        button.ZIndex = 42
+        button.MouseButton1Click:Connect(function()
+            Search.Text = keyword
+            SearchHistoryFrame.Visible = false
+            loadCatalog(keyword)
+        end)
+    end
+
+    local height = math.min(30 + count * 28, 170)
+    SearchHistoryFrame.Size = UDim2.new(1,-250,0,height)
+    SearchHistoryFrame.Visible = Search:IsFocused() and count > 0
+end
+
+local RefreshButton = makeButton(CatalogFrame,"↻",UDim2.new(1,-242,0,0),UDim2.fromOffset(42,29))
+local SortButton = makeButton(CatalogFrame,"Sort",UDim2.new(1,-194,0,0),UDim2.fromOffset(60,29))
+local TrendButton = makeButton(CatalogFrame,"TREND",UDim2.new(1,-128,0,0),UDim2.fromOffset(60,29))
 local AddIdButton = makeButton(CatalogFrame,"+ ID",UDim2.new(1,-66,0,0),UDim2.fromOffset(62,29))
+Search.Size = UDim2.new(1,-250,0,29)
 
 local List = create("ScrollingFrame", {
     Size = UDim2.new(1,0,1,-68),
@@ -1621,7 +1736,6 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
 end
 
 -- forward declaration for callbacks
-local loadCatalog
 local renderSaved
 local renderFavorites
 local renderRecent
@@ -1667,6 +1781,7 @@ loadCatalog = function(keyword)
     local requestId = State.RequestId
 
     State.Search = keyword or ""
+    if State.Search ~= "" then addSearchHistory(State.Search) end
     State.Page = 1
     State.CatalogPage = nil
     HttpMode = false
@@ -1980,6 +2095,35 @@ SortButton.MouseButton1Click:Connect(function()
     loadCatalog(Search.Text or "")
 end)
 
+TrendButton.MouseButton1Click:Connect(function()
+    -- Trending is represented by Roblox's most-favorited ordering.
+    for i,sortInfo in ipairs(Sorts) do
+        if sortInfo[1] == Enum.CatalogSortType.MostFavorited then
+            SortIndex = i
+            break
+        end
+    end
+    SortButton.Text = Sorts[SortIndex][2]
+    Search.Text = ""
+    toast("Trending emotes • Most Favorited")
+    loadCatalog("")
+end)
+
+SearchClear.MouseButton1Click:Connect(function()
+    Search.Text = ""
+    Search:CaptureFocus()
+end)
+
+Search.Focused:Connect(function()
+    renderSearchHistory()
+end)
+
+SearchHistoryClear.MouseButton1Click:Connect(function()
+    clearSearchHistory()
+    SearchHistoryFrame.Visible = false
+    toast("Search history cleared")
+end)
+
 AddIdButton.MouseButton1Click:Connect(addCustomId)
 SavedAddId.MouseButton1Click:Connect(addCustomId)
 
@@ -1997,6 +2141,11 @@ end)
 
 Search.FocusLost:Connect(function(enter)
     if enter then loadCatalog(Search.Text or "") end
+    task.delay(0.08,function()
+        if not Search:IsFocused() then
+            SearchHistoryFrame.Visible = false
+        end
+    end)
 end)
 
 SavedSearch:GetPropertyChangedSignal("Text"):Connect(function()
@@ -2317,9 +2466,11 @@ applyTheme = function()
     PageBox.BackgroundColor3 = surface
     PageBox.TextColor3 = text
     SearchIcon.Image = dark and SEARCH_WHITE or SEARCH_BLACK
+    SearchHistoryFrame.BackgroundColor3 = surface
+    SearchHistoryTitle.TextColor3 = muted
     SavedSearchIcon.Image = dark and SEARCH_WHITE or SEARCH_BLACK
 
-    for _,button in ipairs({CatalogTab,SavedTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,AddIdButton,Prev,Next,AnchorButton,ThemeButton,CloseButton,SavedAddId,PlaybackPause,PlaybackStop}) do
+    for _,button in ipairs({CatalogTab,SavedTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,TrendButton,AddIdButton,SearchClear,SearchHistoryClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,SavedAddId,PlaybackPause,PlaybackStop}) do
         button.BackgroundColor3 = buttonSurface
         button.TextColor3 = text
     end
