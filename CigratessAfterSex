@@ -812,11 +812,9 @@ end
 --==============================================================
 -- SAIKI FRIEND CLOUD — FIREBASE REALTIME DATABASE REST
 --==============================================================
--- Set these once with getgenv before running the script:
-getgenv().SAIKI_FIREBASE_DATABASE_URL = "https://emotemasty-default-rtdb.asia-southeast1.firebasedatabase.app"
-getgenv().SAIKI_FIREBASE_API_KEY = "AIzaSyCoQ_RLspYpFQGsO2f_Tr_sJIGfE1D2dFw"
+-- Firebase configuration. The GUI must never depend on getgenv existing.
+-- If getgenv is available, the configured values below can still be overridden.
 -- Firebase Authentication must have Anonymous sign-in enabled.
--- See the companion Firebase rules/setup file supplied with V36.
 -- This never uses Vexro's server, URL, or shared secret.
 local _getgenv = type(getgenv) == "function" and getgenv or function() return {} end
 local _cfg = _getgenv()
@@ -895,7 +893,7 @@ local function firebaseAuth()
     if status < 200 or status >= 300 then
         return false,"Firebase auth HTTP " .. tostring(status)
     end
-    local decodedOk,data = pcall(function() return HttpService:JSONDecode(res.Body or "") end)
+    local decodedOk,data = pcall(function() return HttpService:JSONDecode(tostring(res.Body or "")) end)
     if not decodedOk or type(data) ~= "table" or not data.idToken then
         return false,"Firebase anonymous auth is disabled or invalid" 
     end
@@ -3542,12 +3540,18 @@ setEffectsForMain(not State.Hidden)
 --==============================================================
 -- START
 --==============================================================
+-- IMPORTANT: show the GUI BEFORE any Firebase/network request.
+-- A slow, blocked, or unavailable executor HTTP request must never prevent
+-- the UI from appearing. Cloud startup is fully asynchronous.
 Gui.Enabled = true
-pcall(cloudStart)
-if State.CloudReady then
-    task.delay(0.35,function() pcall(cloudRefreshFriends) end)
-end
 setTab("Catalog")
+
+task.spawn(function()
+    pcall(cloudStart)
+    if State.CloudReady then
+        task.delay(0.35,function() pcall(cloudRefreshFriends) end)
+    end
+end)
 
 -- Do NOT wait for Character before showing the GUI.
 -- Catalog loading also happens asynchronously.
