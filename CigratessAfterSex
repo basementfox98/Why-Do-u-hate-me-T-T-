@@ -35,7 +35,7 @@
     • Larger left emote/search area
     • No right-side cover/player panel
     • Saiki pastel animated gradient
-    • Cherry blossoms in light mode / snow in dark mode
+    • No falling leaves / snow effects
     • English only
 ]]
 
@@ -163,6 +163,8 @@ local function safeSetClipboard(text)
     end
     return false
 end
+
+local Toast
 
 local function toast(text)
     if not Toast then return end
@@ -383,46 +385,44 @@ local SOCIAL_INSTAGRAM_REMOTE = "https://raw.githubusercontent.com/thedevilondis
 local SOCIAL_DISCORD_REMOTE = "https://raw.githubusercontent.com/thedevilondiscord/Why-Do-u-hate-me-T-T-/main/dx.jpg"
 
 local function getRequestFunction()
-    if type(request) == "function" then return request end
     if syn and type(syn.request) == "function" then return syn.request end
-    if type(http_request) == "function" then return http_request end
     if http and type(http.request) == "function" then return http.request end
+    if type(http_request) == "function" then return http_request end
+    if type(request) == "function" then return request end
 end
 
 local function loadRemoteImage(url, fileName)
-    local getcustomassetFn = getcustomasset or getsynasset
     local requestFn = getRequestFunction()
-    if type(writefile) ~= "function" or type(getcustomassetFn) ~= "function" or not requestFn then
+    local getAsset = getcustomasset or getsynasset
+    if not requestFn or type(writefile) ~= "function" or type(getAsset) ~= "function" then
         return nil
     end
 
-    local folder = "SaikiEmotesAssets"
-    pcall(function()
-        if type(isfolder) == "function" and isfolder(folder) then return end
-        if type(makefolder) == "function" then makefolder(folder) end
+    local ok, response = pcall(function()
+        return requestFn({Url = url, Method = "GET"})
     end)
-
-    local path = folder .. "/" .. fileName
-    local exists = false
-    pcall(function() exists = type(isfile) == "function" and isfile(path) end)
-    if not exists then
-        local ok, response = pcall(function()
-            return requestFn({Url=url, Method="GET"})
-        end)
-        if not ok or not response or type(response.Body) ~= "string" or #response.Body < 20 then
-            return nil
-        end
-        local wrote = pcall(function() writefile(path, response.Body) end)
-        if not wrote then return nil end
+    if not ok or not response or type(response.Body) ~= "string" or #response.Body == 0 then
+        return nil
     end
 
-    local ok, asset = pcall(function() return getcustomassetFn(path) end)
-    if ok and type(asset) == "string" and asset ~= "" then return asset end
+    local path = fileName
+    local wrote = pcall(function()
+        if type(isfile) == "function" and isfile(path) and type(delfile) == "function" then
+            delfile(path)
+        end
+        writefile(path, response.Body)
+    end)
+    if not wrote then return nil end
+
+    local okAsset, asset = pcall(function() return getAsset(path) end)
+    if okAsset and type(asset) == "string" and asset ~= "" then
+        return asset
+    end
     return nil
 end
 
-local SOCIAL_INSTAGRAM_IMAGE = loadRemoteImage(SOCIAL_INSTAGRAM_REMOTE, "instagram.png")
-local SOCIAL_DISCORD_IMAGE = loadRemoteImage(SOCIAL_DISCORD_REMOTE, "discord.jpg")
+local SOCIAL_INSTAGRAM_IMAGE
+local SOCIAL_DISCORD_IMAGE
 
 local function makeSocialButton(name, image, x)
     local button = create("ImageButton", {
@@ -443,8 +443,23 @@ local function makeSocialButton(name, image, x)
     return button
 end
 
-local InstagramButton = makeSocialButton("InstagramButton", SOCIAL_INSTAGRAM_IMAGE, 180)
-local DiscordButton = makeSocialButton("DiscordButton", SOCIAL_DISCORD_IMAGE, 208)
+local InstagramButton = makeSocialButton("InstagramButton", nil, 180)
+local DiscordButton = makeSocialButton("DiscordButton", nil, 208)
+
+-- Never block GUI startup on GitHub/executor HTTP. Load the two icons in the background.
+task.spawn(function()
+    SOCIAL_INSTAGRAM_IMAGE = loadRemoteImage(SOCIAL_INSTAGRAM_REMOTE, "saiki_instagram_icon.png")
+    if SOCIAL_INSTAGRAM_IMAGE and InstagramButton and InstagramButton.Parent then
+        InstagramButton.Image = SOCIAL_INSTAGRAM_IMAGE
+    end
+end)
+
+task.spawn(function()
+    SOCIAL_DISCORD_IMAGE = loadRemoteImage(SOCIAL_DISCORD_REMOTE, "saiki_discord_cover.jpg")
+    if SOCIAL_DISCORD_IMAGE and DiscordButton and DiscordButton.Parent then
+        DiscordButton.Image = SOCIAL_DISCORD_IMAGE
+    end
+end)
 
 local function copySocialLink(url, label)
     local fn = setclipboard or toclipboard or set_clipboard
@@ -461,11 +476,11 @@ local function copySocialLink(url, label)
     end
 end
 
-InstagramButton.Activated:Connect(function()
+InstagramButton.MouseButton1Click:Connect(function()
     copySocialLink(SOCIAL_INSTAGRAM_URL, "Instagram")
 end)
 
-DiscordButton.Activated:Connect(function()
+DiscordButton.MouseButton1Click:Connect(function()
     copySocialLink(SOCIAL_DISCORD_URL, "Discord")
 end)
 
@@ -480,6 +495,7 @@ local function makeButton(parent, text, position, size)
         Font = Enum.Font.GothamBold,
         TextSize = 11,
         AutoButtonColor = true,
+        Active = true,
         ZIndex = 12,
     }, parent)
     corner(b, 9)
@@ -950,7 +966,7 @@ ResetButton.LayoutOrder = 99
 --==============================================================
 -- TOAST
 --==============================================================
-local Toast = create("TextLabel", {
+Toast = create("TextLabel", {
     Size = UDim2.fromOffset(260,30),
     Position = UDim2.new(0.5,-130,1,-38),
     BackgroundColor3 = Color3.fromRGB(50,42,58),
@@ -1108,9 +1124,18 @@ local Sorts = {
 }
 local SortIndex = 1
 
-local function getCatalogPage(keyword)
-    local params
+local httpCatalog
 
+local function getCatalogPage(keyword)
+    -- Keep AvatarEditorService as a fallback for normal Roblox environments.
+    -- The public Marketplace endpoint is attempted first because executor clients
+    -- can be denied AvatarEditorService AssetRead capability.
+    local publicPage = httpCatalog(keyword, nil)
+    if publicPage then
+        return publicPage
+    end
+
+    local params
     local made = pcall(function()
         params = CatalogSearchParams.new()
         params.SearchKeyword = keyword or ""
@@ -1121,19 +1146,16 @@ local function getCatalogPage(keyword)
         params.SortType = Sorts[SortIndex][1]
         params.Limit = PAGE_SIZE
     end)
-
     if not made or not params then return nil end
 
     local ok,result = pcall(function()
         return AvatarEditorService:SearchCatalog(params)
     end)
-
     if not ok then
         ok,result = pcall(function()
             return AvatarEditorService:SearchCatalogAsync(params)
         end)
     end
-
     if ok then return result end
     return nil
 end
@@ -1156,11 +1178,11 @@ local HttpMode = false
 local HttpCursor
 local HttpPrevCursors = {}
 
-local function httpCatalog(keyword,cursor)
+httpCatalog = function(keyword,cursor)
     local httpSort = math.max(0, math.min(5, SortIndex - 1))
     local url =
         "https://catalog.roblox.com/v1/search/items/details" ..
-        "?Category=12&Subcategory=39&SortType=" .. tostring(httpSort) .. "&SortAggregation=6&Limit=10"
+        "?Category=12&Subcategory=39&SortType=" .. tostring(httpSort) .. "&SortAggregation=5&Limit=10"
 
     if keyword and keyword ~= "" then
         url = url .. "&Keyword=" .. HttpService:UrlEncode(keyword)
@@ -1212,7 +1234,7 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
 
     local card = create("Frame", {
         Size = UDim2.fromOffset(151,72),
-        BackgroundColor3 = Color3.fromRGB(251,248,253),
+        BackgroundColor3 = State.Dark and Color3.fromRGB(31,27,36) or Color3.fromRGB(251,248,253),
         BorderSizePixel = 0,
         ZIndex = 6,
     }, parent)
@@ -1236,7 +1258,7 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
         Position = UDim2.fromOffset(63,5),
         BackgroundTransparency = 1,
         Text = name,
-        TextColor3 = Color3.fromRGB(65,55,75),
+        TextColor3 = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(65,55,75),
         Font = Enum.Font.GothamBold,
         TextSize = 9,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -1249,7 +1271,7 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
         Position = UDim2.fromOffset(63,23),
         BackgroundTransparency = 1,
         Text = "ID: " .. tostring(id),
-        TextColor3 = Color3.fromRGB(130,120,140),
+        TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),
         Font = Enum.Font.Gotham,
         TextSize = 7,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -1370,6 +1392,20 @@ loadCatalog = function(keyword)
 
         if requestId ~= State.RequestId then return end
 
+        if result and result.data then
+            HttpMode = true
+            State.Loading = false
+            HttpCursor = result.nextCursor
+            clearCardTable(CatalogCards)
+            for _,item in ipairs(result.data) do
+                createEmoteCard(item,List,CatalogCards,false)
+            end
+            PageBox.Text = "Page 1"
+            Prev.Active = false
+            Next.Active = result.nextCursor ~= nil
+            return
+        end
+
         if result then
             State.CatalogPage = result
             State.Loading = false
@@ -1377,7 +1413,7 @@ loadCatalog = function(keyword)
             return
         end
 
-        -- Public catalog fallback.
+        -- Public catalog fallback if the first route could not be used.
         HttpMode = true
         local page = httpCatalog(State.Search,nil)
         State.Loading = false
@@ -1394,7 +1430,7 @@ loadCatalog = function(keyword)
             Prev.Active = false
             Next.Active = page.nextCursor ~= nil
         else
-            EmptyLabel.Text = "Roblox Store unavailable"
+            EmptyLabel.Text = "Roblox Store unavailable\nCheck executor HTTP access"
             EmptyLabel.Visible = true
             PageBox.Text = "Page 1"
         end
@@ -1604,7 +1640,7 @@ end
 --==============================================================
 -- BUTTON EVENTS
 --==============================================================
-RefreshButton.Activated:Connect(function()
+RefreshButton.MouseButton1Click:Connect(function()
     if State.Tab == "Catalog" then
         loadCatalog(Search.Text or "")
     else
@@ -1612,17 +1648,17 @@ RefreshButton.Activated:Connect(function()
     end
 end)
 
-SortButton.Activated:Connect(function()
+SortButton.MouseButton1Click:Connect(function()
     SortIndex = SortIndex % #Sorts + 1
     SortButton.Text = Sorts[SortIndex][2]
     loadCatalog(Search.Text or "")
 end)
 
-AddIdButton.Activated:Connect(addCustomId)
-SavedAddId.Activated:Connect(addCustomId)
+AddIdButton.MouseButton1Click:Connect(addCustomId)
+SavedAddId.MouseButton1Click:Connect(addCustomId)
 
-Prev.Activated:Connect(previousPage)
-Next.Activated:Connect(nextPage)
+Prev.MouseButton1Click:Connect(previousPage)
+Next.MouseButton1Click:Connect(nextPage)
 
 Search:GetPropertyChangedSignal("Text"):Connect(function()
     local value = Search.Text or ""
@@ -1673,35 +1709,36 @@ PageBox.FocusLost:Connect(function(enter)
     end
 end)
 
-local function setTab(tab)
+local setTab
+
+setTab = function(tab)
     State.Tab = tab
 
     CatalogFrame.Visible = tab == "Catalog"
     SavedFrame.Visible = tab == "Saved"
     SettingsFrame.Visible = tab == "Settings"
 
-    CatalogTab.BackgroundColor3 = tab == "Catalog"
-        and Color3.fromRGB(235,220,245)
-        or Color3.fromRGB(255,248,253)
+    local tabOn = State.Dark and Color3.fromRGB(76,55,82) or Color3.fromRGB(235,220,245)
+    local tabOff = State.Dark and Color3.fromRGB(42,37,49) or Color3.fromRGB(255,248,253)
 
-    SavedTab.BackgroundColor3 = tab == "Saved"
-        and Color3.fromRGB(235,220,245)
-        or Color3.fromRGB(255,248,253)
-
-    SettingsTab.BackgroundColor3 = tab == "Settings"
-        and Color3.fromRGB(235,220,245)
-        or Color3.fromRGB(255,248,253)
+    CatalogTab.BackgroundColor3 = tab == "Catalog" and tabOn or tabOff
+    SavedTab.BackgroundColor3 = tab == "Saved" and tabOn or tabOff
+    SettingsTab.BackgroundColor3 = tab == "Settings" and tabOn or tabOff
+    local tabText = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(55,47,65)
+    CatalogTab.TextColor3 = tabText
+    SavedTab.TextColor3 = tabText
+    SettingsTab.TextColor3 = tabText
 
     if tab == "Saved" then
         renderSaved(SavedSearch.Text or "")
     end
 end
 
-CatalogTab.Activated:Connect(function() setTab("Catalog") end)
-SavedTab.Activated:Connect(function() setTab("Saved") end)
-SettingsTab.Activated:Connect(function() setTab("Settings") end)
+CatalogTab.MouseButton1Click:Connect(function() setTab("Catalog") end)
+SavedTab.MouseButton1Click:Connect(function() setTab("Saved") end)
+SettingsTab.MouseButton1Click:Connect(function() setTab("Settings") end)
 
-ResetButton.Activated:Connect(function()
+ResetButton.MouseButton1Click:Connect(function()
     Settings.Speed = 1
     Settings.TimePosition = 0
     Settings.Weight = 1
@@ -1720,17 +1757,20 @@ ResetButton.Activated:Connect(function()
     toast("Settings reset")
 end)
 
-AnchorButton.Activated:Connect(function()
+AnchorButton.MouseButton1Click:Connect(function()
     State.Anchored = not State.Anchored
     AnchorButton.Text = State.Anchored and "🔒" or "🔓"
 end)
 
 local applyTheme
 
-ThemeButton.Activated:Connect(function()
+ThemeButton.MouseButton1Click:Connect(function()
     State.Dark = not State.Dark
     ThemeButton.Text = State.Dark and "☀" or "🌙"
-    if applyTheme then applyTheme() end
+    if applyTheme then
+        applyTheme()
+    end
+    setTab(State.Tab)
 end)
 
 --==============================================================
@@ -1798,7 +1838,7 @@ local function toggleMain()
     setEffectsForMain(not State.Hidden)
 end
 
-HideButton.Activated:Connect(toggleMain)
+HideButton.MouseButton1Click:Connect(toggleMain)
 
 UserInputService.InputBegan:Connect(function(input,processed)
     if processed then return end
@@ -1812,7 +1852,7 @@ UserInputService.InputBegan:Connect(function(input,processed)
     end
 end)
 
-CloseButton.Activated:Connect(function()
+CloseButton.MouseButton1Click:Connect(function()
     stopCurrentEmote()
     State.Hidden = true
     Main.Visible = false
@@ -1974,7 +2014,7 @@ task.spawn(function()
     task.wait(0.15)
     loadCatalog("")
     task.wait(0.5)
-    toast("SAIKI EMOTES • Ready")
+    toast("SAIKI EMOTES • Ready • Search / Theme / Tabs active")
 end)
 
 print("[SAIKI EMOTES] Gaze Edition loaded.")
