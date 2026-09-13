@@ -1,5 +1,5 @@
 --[[
-    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V33 KEYBINDS
+    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V34 HISTORY IMPROVEMENTS
     Compact rebuild based on the supplied GazeOld + Saiki Music references.
 
     INCLUDED FROM GAZE:
@@ -20,6 +20,7 @@
     • Catalog result count
     • Per-emote keyboard keybinds
     • Keybind persistence / conflict detection
+    • Recent history individual removal / replay / clear all / 20-item cap
     • Clear search button
     • Custom Animation ID
     • Speed
@@ -1776,7 +1777,7 @@ local function clearCardTable(tbl)
     table.clear(tbl)
 end
 
-local function createEmoteCard(item, parent, cardTable)
+local function createEmoteCard(item, parent, cardTable, isRecentCard)
     local id = numericId(item.Id or item.id or item.AssetId or item.assetId)
     if not id then return end
 
@@ -1861,6 +1862,14 @@ local function createEmoteCard(item, parent, cardTable)
     bind.ZIndex = 9
     bind:SetAttribute("EmoteId", tostring(id))
 
+    local recentRemove
+    if isRecentCard then
+        recentRemove = makeButton(card, "×", UDim2.fromOffset(110,5), UDim2.fromOffset(15,19))
+        recentRemove.TextSize = 12
+        recentRemove.BackgroundTransparency = 0.08
+        recentRemove.ZIndex = 10
+    end
+
     play.MouseButton1Click:Connect(function()
         State.Selected = {Id=id,AssetId=assetId,Name=name}
         if playEmote(assetId,name) then
@@ -1886,6 +1895,22 @@ local function createEmoteCard(item, parent, cardTable)
     bind.MouseButton1Click:Connect(function()
         beginKeybindCapture(id, bind)
     end)
+
+    if recentRemove then
+        recentRemove.MouseButton1Click:Connect(function()
+            for i = #State.Recent, 1, -1 do
+                if numericId(State.Recent[i].Id or State.Recent[i].AssetId) == id then
+                    table.remove(State.Recent, i)
+                    break
+                end
+            end
+            saveData()
+            if State.Tab == "Recent" and renderRecent then
+                renderRecent(RecentSearch and RecentSearch.Text or "")
+            end
+            toast("Removed from Recent")
+        end)
+    end
 
     copy.MouseButton1Click:Connect(function()
         if safeSetClipboard(tostring(id)) then
@@ -2104,10 +2129,10 @@ local function previousPage()
     end)
 end
 
-local function renderSimpleCollection(list, cards, items, emptyText)
+local function renderSimpleCollection(list, cards, items, emptyText, isRecentCard)
     clearCardTable(cards)
     for _,item in ipairs(items) do
-        createEmoteCard(item, list, cards)
+        createEmoteCard(item, list, cards, isRecentCard)
     end
 
     -- The grid owns all children of the ScrollingFrame, so the empty-state label
@@ -2152,7 +2177,7 @@ renderRecent = function(keyword)
     for _,item in ipairs(State.Recent) do
         if q == "" or tostring(item.Name):lower():find(q,1,true) then table.insert(items,item) end
     end
-    renderSimpleCollection(RecentList,RecentCards,items,"No recently played emotes")
+    renderSimpleCollection(RecentList,RecentCards,items,"No recently played emotes",true)
 end
 
 
