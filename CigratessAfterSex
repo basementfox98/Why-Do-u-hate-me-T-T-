@@ -1,5 +1,5 @@
 --[[
-    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V31 CATALOG UPGRADE
+    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V33 KEYBINDS
     Compact rebuild based on the supplied GazeOld + Saiki Music references.
 
     INCLUDED FROM GAZE:
@@ -18,6 +18,8 @@
     • Catalog loading / retry state
     • Catalog request de-duplication
     • Catalog result count
+    • Per-emote keyboard keybinds
+    • Keybind persistence / conflict detection
     • Clear search button
     • Custom Animation ID
     • Speed
@@ -129,6 +131,11 @@ local State = {
     FavoriteSet = {},
     Recent = {},
     SearchHistory = {},
+
+    Keybinds = {},       -- [emoteIdString] = KeyCode.Name
+    KeybindByKey = {},   -- [KeyCode.Name] = emoteId number
+    KeybindCaptureId = nil,
+    KeybindCaptureButton = nil,
 
     GradientTime = 0,
 }
@@ -245,6 +252,7 @@ local function normalizeEmote(item)
 end
 
 local saveData
+local rebuildKeybindIndex
 
 local function addSearchHistory(keyword)
     keyword = tostring(keyword or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -296,13 +304,24 @@ local function loadSaved()
             local q = tostring(item or "")
             if q ~= "" then table.insert(State.SearchHistory, q) end
         end
+
+        State.Keybinds = {}
+        for emoteId, keyName in pairs(decoded.keybinds or {}) do
+            local id = numericId(emoteId)
+            local key = tostring(keyName or "")
+            if id and key ~= "" and Enum.KeyCode[key] then
+                State.Keybinds[tostring(id)] = key
+            end
+        end
     end)
 
     rebuildFavoriteSet()
+    rebuildKeybindIndex()
 end
 
 saveData = function()
     rebuildFavoriteSet()
+    rebuildKeybindIndex()
 
     pcall(function()
         if type(writefile) == "function" then
@@ -310,9 +329,149 @@ saveData = function()
                 favorites = State.Favorites,
                 recent = State.Recent,
                 searchHistory = State.SearchHistory,
+                keybinds = State.Keybinds,
             }))
         end
     end)
+end
+
+--==============================================================
+-- KEYBINDS
+--==============================================================
+local RESERVED_KEYBINDS = {
+    G = true,
+    Left = true,
+    Right = true,
+    Escape = true,
+}
+
+rebuildKeybindIndex = function()
+    State.KeybindByKey = {}
+    for emoteId, keyName in pairs(State.Keybinds) do
+        local id = numericId(emoteId)
+        local key = tostring(keyName or "")
+        if id and key ~= "" and Enum.KeyCode[key] then
+            State.KeybindByKey[key] = id
+        end
+    end
+end
+
+local function getKeybind(id)
+    id = numericId(id)
+    return id and State.Keybinds[tostring(id)] or nil
+end
+
+local function removeKeybind(id, silent)
+    id = numericId(id)
+    if not id then return end
+    local oldKey = State.Keybinds[tostring(id)]
+    if not oldKey then return end
+    State.Keybinds[tostring(id)] = nil
+    State.KeybindByKey[oldKey] = nil
+    saveData()
+    if not silent then toast("Keybind removed") end
+end
+
+local function setKeybind(id, keyName)
+    id = numericId(id)
+    keyName = tostring(keyName or "")
+    if not id or keyName == "" or not Enum.KeyCode[keyName] then return false, "Invalid key" end
+    if RESERVED_KEYBINDS[keyName] then return false, "That key is reserved" end
+
+    local conflictId = State.KeybindByKey[keyName]
+    if conflictId and conflictId ~= id then
+        return false, "Key already bound to emote " .. tostring(conflictId)
+    end
+
+    local oldKey = State.Keybinds[tostring(id)]
+    if oldKey and oldKey ~= keyName then
+        State.KeybindByKey[oldKey] = nil
+    end
+
+    State.Keybinds[tostring(id)] = keyName
+    State.KeybindByKey[keyName] = id
+    saveData()
+    return true
+end
+
+local function cancelKeybindCapture()
+    local button = State.KeybindCaptureButton
+    State.KeybindCaptureId = nil
+    State.KeybindCaptureButton = nil
+    if button and button.Parent then
+        local id = numericId(button:GetAttribute("EmoteId"))
+        local key = getKeybind(id)
+        button.Text = key and ("[" .. key .. "]") or "BIND"
+    end
+end
+
+local function beginKeybindCapture(id, button)
+    id = numericId(id)
+    if not id then return end
+    if State.KeybindCaptureId then cancelKeybindCapture() end
+    State.KeybindCaptureId = id
+    State.KeybindCaptureButton = button
+    if button then
+        button:SetAttribute("EmoteId", tostring(id))
+        button.Text = "PRESS"
+    end
+    toast("Press a key for this emote • Esc cancels")
+end
+
+local playEmote
+local addRecent
+
+local function handleKeybindInput(input)
+    if not State.KeybindCaptureId then return false end
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then return true end
+
+    local id = State.KeybindCaptureId
+    local button = State.KeybindCaptureButton
+    local keyName = input.KeyCode and input.KeyCode.Name or ""
+
+    if keyName == "Escape" then
+        cancelKeybindCapture()
+        toast("Keybind cancelled")
+        return true
+    end
+
+    if keyName == "Delete" or keyName == "Backspace" then
+        removeKeybind(id, true)
+        State.KeybindCaptureId = nil
+        State.KeybindCaptureButton = nil
+        if button and button.Parent then
+            button.Text = "BIND"
+            button.TextSize = 5.5
+        end
+        toast("Keybind removed")
+        return true
+    end
+
+    if keyName == "Unknown" or keyName == "" then return true end
+
+    local ok, reason = setKeybind(id, keyName)
+    if not ok then
+        toast(reason or "Could not set keybind")
+        return true
+    end
+
+    State.KeybindCaptureId = nil
+    State.KeybindCaptureButton = nil
+    if button and button.Parent then button.Text = "[" .. keyName .. "]" end
+    toast("Bound " .. keyName .. " • Emote " .. tostring(id))
+    return true
+end
+
+local function handleEmoteKeybind(keyName)
+    local id = State.KeybindByKey[keyName]
+    if not id then return false end
+    local name = "Emote " .. tostring(id)
+    if State.Selected and numericId(State.Selected.Id or State.Selected.AssetId) == id then
+        name = tostring(State.Selected.Name or name)
+    end
+    local ok = playEmote(id, name)
+    if ok then addRecent({Id=id, AssetId=id, Name=name}) end
+    return true
 end
 
 local function findFavorite(id)
@@ -351,7 +510,7 @@ local function toggleFavorite(item)
     end
 end
 
-local function addRecent(item)
+addRecent = function(item)
     local normalized = normalizeEmote(item)
     if not normalized then return end
     for i = #State.Recent, 1, -1 do
@@ -1157,6 +1316,22 @@ addSettingToggle("Stop Other Animations On Play","StopOtherAnimations")
 addSettingToggle("High Priority","HighPriority")
 addSettingToggle("Freeze On Finish","FreezeOnFinish")
 
+local KeybindInfo = create("TextLabel", {
+    Size = UDim2.new(1,-6,0,42),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BorderSizePixel = 0,
+    Text = "KEYBINDS • Click BIND / [KEY] on an emote to assign or change it.\nWhile capturing, Delete/Backspace removes it; Escape cancels. G / Left / Right are reserved.",
+    TextColor3 = Color3.fromRGB(116,108,130),
+    Font = Enum.Font.GothamMedium,
+    TextSize = 9,
+    TextWrapped = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Center,
+    LayoutOrder = 15,
+}, SettingsFrame)
+corner(KeybindInfo,9)
+stroke(KeybindInfo,Color3.fromRGB(220,205,230),1,0.18)
+
 addSettingNumber("Speed","Speed",0,5,0.05)
 addSettingNumber("Time Position","TimePosition",0,1,0.01)
 addSettingNumber("Weight","Weight",0,1,0.01)
@@ -1391,7 +1566,7 @@ local function resolveAnimationId(assetId)
     return resolved
 end
 
-local function playEmote(assetId, name)
+playEmote = function(assetId, name)
     local id = numericId(assetId)
     if not id then
         toast("Invalid emote ID")
@@ -1672,11 +1847,19 @@ local function createEmoteCard(item, parent, cardTable)
     favorite.BackgroundTransparency = 0.08
     favorite.ZIndex = 9
 
-    local copy = makeButton(card, "COPY", UDim2.fromOffset(122,24), UDim2.fromOffset(27,15))
+    local copy = makeButton(card, "COPY", UDim2.fromOffset(92,24), UDim2.fromOffset(31,15))
     copy.TextSize = 5.5
     copy.AutoButtonColor = true
     copy.BackgroundTransparency = 0.08
     copy.ZIndex = 9
+
+    local keyName = getKeybind(id)
+    local bind = makeButton(card, keyName and ("[" .. keyName .. "]") or "BIND", UDim2.fromOffset(61,24), UDim2.fromOffset(28,15))
+    bind.TextSize = keyName and 5 or 5.5
+    bind.AutoButtonColor = true
+    bind.BackgroundTransparency = 0.08
+    bind.ZIndex = 9
+    bind:SetAttribute("EmoteId", tostring(id))
 
     play.MouseButton1Click:Connect(function()
         State.Selected = {Id=id,AssetId=assetId,Name=name}
@@ -1698,6 +1881,10 @@ local function createEmoteCard(item, parent, cardTable)
                 end
             end)
         end
+    end)
+
+    bind.MouseButton1Click:Connect(function()
+        beginKeybindCapture(id, bind)
     end)
 
     copy.MouseButton1Click:Connect(function()
@@ -2324,18 +2511,29 @@ end
 HideButton.MouseButton1Click:Connect(toggleMain)
 
 UserInputService.InputBegan:Connect(function(input,processed)
+    -- V33 uses the existing global input handler for capture and playback.
+    if State.KeybindCaptureId then
+        handleKeybindInput(input)
+        return
+    end
+
     if processed then return end
-    if input.UserInputType == Enum.UserInputType.Keyboard
-        and input.KeyCode == Enum.KeyCode.G then
-        toggleMain()
-    elseif input.KeyCode == Enum.KeyCode.Left then
-        if State.Tab == "Catalog" then previousPage() end
-    elseif input.KeyCode == Enum.KeyCode.Right then
-        if State.Tab == "Catalog" then nextPage() end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        local keyName = input.KeyCode and input.KeyCode.Name or ""
+        if keyName ~= "" and handleEmoteKeybind(keyName) then return end
+
+        if input.KeyCode == Enum.KeyCode.G then
+            toggleMain()
+        elseif input.KeyCode == Enum.KeyCode.Left then
+            if State.Tab == "Catalog" then previousPage() end
+        elseif input.KeyCode == Enum.KeyCode.Right then
+            if State.Tab == "Catalog" then nextPage() end
+        end
     end
 end)
 
 CloseButton.MouseButton1Click:Connect(function()
+    cancelKeybindCapture()
     stopCurrentEmote()
     State.Hidden = true
     Main.Visible = false
@@ -2488,6 +2686,10 @@ applyTheme = function()
         end
     end
 
+    if KeybindInfo then
+        KeybindInfo.BackgroundColor3 = surface
+        KeybindInfo.TextColor3 = muted
+    end
     local function themeCards(container)
         for _,obj in ipairs(container:GetChildren()) do
             if obj:IsA("Frame") then
