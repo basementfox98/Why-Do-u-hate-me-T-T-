@@ -281,7 +281,11 @@ local function loadSaved()
 
         -- Favorites/recent/search history use the existing file so older data is preserved.
         -- Old v16 plain saved-emote arrays are intentionally ignored because Saved is removed.
-        for _, item in ipairs(decoded.favorites or {}) do
+        local storedFavorites = decoded.favorites
+        if type(storedFavorites) ~= "table" then storedFavorites = decoded.Favorites end
+        if type(storedFavorites) ~= "table" then storedFavorites = decoded.favoriteEmotes end
+        if type(storedFavorites) ~= "table" then storedFavorites = {} end
+        for _, item in ipairs(storedFavorites) do
             local normalized = normalizeEmote(item)
             if normalized then table.insert(State.Favorites, normalized) end
         end
@@ -1612,11 +1616,14 @@ local function createEmoteCard(item, parent, cardTable)
     end)
 
     favorite.MouseButton1Click:Connect(function()
-        toggleFavorite({Id=id, AssetId=assetId, Name=name})
-        -- Rebuild the local set and refresh collection tabs immediately so the
-        -- change is visible without reopening the GUI or restarting the script.
+        local favoriteItem = {Id=id, AssetId=assetId, Name=name, AnimationId="rbxassetid://"..tostring(assetId)}
+        toggleFavorite(favoriteItem)
         rebuildFavoriteSet()
         favorite.Text = State.FavoriteSet[id] and "★" or "☆"
+
+        -- If this card belongs to Favorites, redraw it immediately. If it is a
+        -- Catalog card, the Catalog stays intact while the Favorites tab is
+        -- refreshed when opened.
         if renderFavorites then
             task.defer(function()
                 renderFavorites(FavoritesSearch.Text or "")
@@ -1873,16 +1880,28 @@ local function forceCollectionCanvas(list, grid)
 end
 
 renderFavorites = function(keyword)
+    -- Always rebuild from the persisted/in-memory favorite list before rendering.
+    -- This prevents the UI from depending on a stale FavoriteSet.
+    rebuildFavoriteSet()
+
     local q = tostring(keyword or FavoritesSearch.Text or ""):lower()
     local items = {}
+    local seen = {}
+
     for _,item in ipairs(State.Favorites) do
         local normalized = normalizeEmote(item)
-        if normalized and (q == "" or tostring(normalized.Name):lower():find(q,1,true)) then
-            table.insert(items,normalized)
+        if normalized and not seen[normalized.Id] then
+            seen[normalized.Id] = true
+            if q == "" or tostring(normalized.Name):lower():find(q,1,true) then
+                table.insert(items,normalized)
+            end
         end
     end
+
     renderSimpleCollection(FavoritesList,FavoritesCards,items,"No favorite emotes")
-    task.defer(function() forceCollectionCanvas(FavoritesList,FavoritesGrid) end)
+    task.defer(function()
+        forceCollectionCanvas(FavoritesList,FavoritesGrid)
+    end)
 end
 
 renderRecent = function(keyword)
@@ -2122,6 +2141,7 @@ setTab = function(tab)
     local tabText = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(55,47,65)
     CatalogTab.TextColor3 = tabText; FavoritesTab.TextColor3 = tabText; RecentTab.TextColor3 = tabText; SettingsTab.TextColor3 = tabText
     if tab == "Favorites" then
+        rebuildFavoriteSet()
         renderFavorites(FavoritesSearch.Text or "")
     elseif tab == "Recent" then
         renderRecent(RecentSearch.Text or "")
