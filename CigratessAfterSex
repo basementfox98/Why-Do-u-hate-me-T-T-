@@ -1,5 +1,5 @@
 --[[
-    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V27 FAVORITES FIX
+    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V28 COLLECTION TOOLS
     Compact rebuild based on the supplied GazeOld + Saiki Music references.
 
     INCLUDED FROM GAZE:
@@ -31,7 +31,7 @@
     • Draggable header
     • Resizable window
     • R6-safe behavior
-    • Persistent saved emotes when executor file APIs exist
+    • Persistent favorites / recent / search history when executor file APIs exist
 
     SAIKI:
     • Smaller compact UI
@@ -875,9 +875,29 @@ local FavoritesFrame = create("Frame", {
     ZIndex = 5,
 }, Main)
 
-local FavoritesList = create("ScrollingFrame", {
-    Size = UDim2.new(1,0,1,0),
+local FavoritesSearch = create("TextBox", {
+    Size = UDim2.new(1,-92,0,29),
     Position = UDim2.fromOffset(0,0),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BorderSizePixel = 0,
+    PlaceholderText = "    Search favorites...",
+    Text = "",
+    ClearTextOnFocus = false,
+    TextColor3 = Color3.fromRGB(55,47,65),
+    PlaceholderColor3 = Color3.fromRGB(130,120,140),
+    Font = Enum.Font.Gotham,
+    TextSize = 10,
+    ZIndex = 6,
+}, FavoritesFrame)
+corner(FavoritesSearch,9)
+stroke(FavoritesSearch,Color3.fromRGB(220,205,230),1,0.15)
+
+local FavoritesClear = makeButton(FavoritesFrame,"CLEAR",UDim2.new(1,-82,0,0),UDim2.fromOffset(82,29))
+FavoritesClear.TextSize = 8
+
+local FavoritesList = create("ScrollingFrame", {
+    Size = UDim2.new(1,0,1,-35),
+    Position = UDim2.fromOffset(0,35),
     BackgroundColor3 = Color3.fromRGB(255,255,255),
     BackgroundTransparency = 0.05,
     BorderSizePixel = 0,
@@ -898,8 +918,28 @@ local RecentFrame = create("Frame", {
     Size = UDim2.new(1,-20,1,-102), Position = UDim2.fromOffset(10,98),
     BackgroundTransparency = 1, Visible = false, ZIndex = 5,
 }, Main)
+local RecentSearch = create("TextBox", {
+    Size = UDim2.new(1,-92,0,29),
+    Position = UDim2.fromOffset(0,0),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BorderSizePixel = 0,
+    PlaceholderText = "    Search recent emotes...",
+    Text = "",
+    ClearTextOnFocus = false,
+    TextColor3 = Color3.fromRGB(55,47,65),
+    PlaceholderColor3 = Color3.fromRGB(130,120,140),
+    Font = Enum.Font.Gotham,
+    TextSize = 10,
+    ZIndex = 6,
+}, RecentFrame)
+corner(RecentSearch,9)
+stroke(RecentSearch,Color3.fromRGB(220,205,230),1,0.15)
+
+local RecentClear = makeButton(RecentFrame,"CLEAR",UDim2.new(1,-82,0,0),UDim2.fromOffset(82,29))
+RecentClear.TextSize = 8
+
 local RecentList = create("ScrollingFrame", {
-    Size=UDim2.new(1,0,1,0), Position=UDim2.fromOffset(0,0),
+    Size=UDim2.new(1,0,1,-35), Position=UDim2.fromOffset(0,35),
     BackgroundColor3=Color3.fromRGB(255,255,255), BackgroundTransparency=0.05,
     BorderSizePixel=0, ScrollBarThickness=4, AutomaticCanvasSize=Enum.AutomaticSize.Y,
     CanvasSize=UDim2.new(), ZIndex=5,
@@ -1579,11 +1619,13 @@ local function createEmoteCard(item, parent, cardTable)
         -- change is visible without reopening the GUI or restarting the script.
         rebuildFavoriteSet()
         favorite.Text = State.FavoriteSet[id] and "★" or "☆"
-        task.defer(function()
-            if renderFavorites then
-                renderFavorites("")
-            end
-        end)
+        if State.Tab == "Favorites" then
+            task.defer(function()
+                if renderFavorites then
+                    renderFavorites(FavoritesSearch and FavoritesSearch.Text or "")
+                end
+            end)
+        end
     end)
 
     copy.MouseButton1Click:Connect(function()
@@ -1932,9 +1974,9 @@ RefreshButton.MouseButton1Click:Connect(function()
     if State.Tab == "Catalog" then
         loadCatalog(Search.Text or "")
     elseif State.Tab == "Favorites" then
-        renderFavorites("")
+        renderFavorites(FavoritesSearch.Text or "")
     elseif State.Tab == "Recent" then
-        renderRecent("")
+        renderRecent(RecentSearch.Text or "")
     end
 end)
 
@@ -1958,6 +2000,55 @@ SearchHistoryClear.MouseButton1Click:Connect(function()
     clearSearchHistory()
     SearchHistoryFrame.Visible = false
     toast("Search history cleared")
+end)
+
+FavoritesClear.MouseButton1Click:Connect(function()
+    if #State.Favorites == 0 then
+        FavoritesSearch.Text = ""
+        renderFavorites("")
+        toast("Favorites already empty")
+        return
+    end
+    table.clear(State.Favorites)
+    rebuildFavoriteSet()
+    saveData()
+    FavoritesSearch.Text = ""
+    renderFavorites("")
+    toast("Favorites cleared")
+end)
+
+RecentClear.MouseButton1Click:Connect(function()
+    if #State.Recent == 0 then
+        RecentSearch.Text = ""
+        renderRecent("")
+        toast("Recent list already empty")
+        return
+    end
+    table.clear(State.Recent)
+    saveData()
+    RecentSearch.Text = ""
+    renderRecent("")
+    toast("Recent list cleared")
+end)
+
+FavoritesSearch:GetPropertyChangedSignal("Text"):Connect(function()
+    if State.Tab ~= "Favorites" then return end
+    local value = FavoritesSearch.Text or ""
+    task.defer(function()
+        if State.Tab == "Favorites" and FavoritesSearch.Text == value then
+            renderFavorites(value)
+        end
+    end)
+end)
+
+RecentSearch:GetPropertyChangedSignal("Text"):Connect(function()
+    if State.Tab ~= "Recent" then return end
+    local value = RecentSearch.Text or ""
+    task.defer(function()
+        if State.Tab == "Recent" and RecentSearch.Text == value then
+            renderRecent(value)
+        end
+    end)
 end)
 
 AddIdButton.MouseButton1Click:Connect(addCustomId)
@@ -2034,9 +2125,9 @@ setTab = function(tab)
     CatalogTab.TextColor3 = tabText; FavoritesTab.TextColor3 = tabText; RecentTab.TextColor3 = tabText; SettingsTab.TextColor3 = tabText
 
     if tab == "Favorites" then
-        renderFavorites("")
+        renderFavorites(FavoritesSearch.Text or "")
     elseif tab == "Recent" then
-        renderRecent("")
+        renderRecent(RecentSearch.Text or "")
     end
 end
 
@@ -2290,8 +2381,14 @@ applyTheme = function()
     SearchIcon.Image = dark and SEARCH_WHITE or SEARCH_BLACK
     SearchHistoryFrame.BackgroundColor3 = surface
     SearchHistoryTitle.TextColor3 = muted
+    FavoritesSearch.BackgroundColor3 = surface
+    FavoritesSearch.TextColor3 = text
+    FavoritesSearch.PlaceholderColor3 = muted
+    RecentSearch.BackgroundColor3 = surface
+    RecentSearch.TextColor3 = text
+    RecentSearch.PlaceholderColor3 = muted
 
-    for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,AddIdButton,SearchClear,SearchHistoryClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop}) do
+    for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,AddIdButton,SearchClear,SearchHistoryClear,FavoritesClear,RecentClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop}) do
         button.BackgroundColor3 = buttonSurface
         button.TextColor3 = text
     end
