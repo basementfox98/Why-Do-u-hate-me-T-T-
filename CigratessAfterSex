@@ -1,5 +1,5 @@
 --[[
-    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V19
+    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V20
     Compact rebuild based on the supplied GazeOld + Saiki Music references.
 
     INCLUDED FROM GAZE:
@@ -15,7 +15,7 @@
     • Pause / Resume playback
     • Compact playback HUD with progress
     • Save / Remove saved emotes
-    • Favorite toggle
+    • Favorite toggle with immediate/persistent refresh
     • Trending preset
     • Search history
     • Clear search button
@@ -1699,9 +1699,14 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
 
     favorite.MouseButton1Click:Connect(function()
         toggleFavorite({Id=id, AssetId=assetId, Name=name})
+        -- Rebuild the local set and refresh collection tabs immediately so the
+        -- change is visible without reopening the GUI or restarting the script.
+        rebuildFavoriteSet()
         favorite.Text = State.FavoriteSet[id] and "★" or "☆"
         task.defer(function()
-            if State.Tab == "Favorites" then renderFavorites("") end
+            if refreshCollectionViews then
+                refreshCollectionViews()
+            end
         end)
     end)
 
@@ -1714,22 +1719,27 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
     end)
 
     save.MouseButton1Click:Connect(function()
-        if savedMode then
+        -- Use the actual saved set instead of the card's original mode.
+        -- This keeps the button correct even after saving from CATALOG.
+        if findSaved(id) then
             removeSaved(id)
-            task.defer(function()
-                if State.Tab == "Saved" then
-                    local q = SavedSearch.Text or ""
-                    renderSaved(q)
-                end
-            end)
+            save.Text = "SAVE"
+            save.TextSize = 7
         else
             addSaved({
                 Id=id,
                 AssetId=assetId,
                 Name=name,
             })
-            save.Text = "SAVE"
+            save.Text = "REMOVE"
+            save.TextSize = 6
         end
+
+        task.defer(function()
+            if refreshCollectionViews then
+                refreshCollectionViews()
+            end
+        end)
     end)
 
     table.insert(cardTable,card)
@@ -1739,6 +1749,7 @@ end
 local renderSaved
 local renderFavorites
 local renderRecent
+local refreshCollectionViews
 
 --==============================================================
 -- CATALOG RENDER / PAGINATION
@@ -1807,6 +1818,8 @@ loadCatalog = function(keyword)
             for _,item in ipairs(result.data) do
                 createEmoteCard(item,List,CatalogCards,false)
             end
+            EmptyLabel.Visible = #result.data == 0
+            EmptyLabel.Text = "No emotes found"
             PageBox.Text = "Page 1"
             Prev.Active = false
             Next.Active = result.nextCursor ~= nil
@@ -1833,6 +1846,8 @@ loadCatalog = function(keyword)
             for _,item in ipairs(page.data) do
                 createEmoteCard(item,List,CatalogCards,false)
             end
+            EmptyLabel.Visible = #page.data == 0
+            EmptyLabel.Text = "No emotes found"
             PageBox.Text = "Page 1"
             Prev.Active = false
             Next.Active = page.nextCursor ~= nil
@@ -1862,6 +1877,8 @@ local function nextPage()
             for _,item in ipairs(page.data) do
                 createEmoteCard(item,List,CatalogCards,false)
             end
+            EmptyLabel.Visible = #page.data == 0
+            EmptyLabel.Text = "No emotes found"
             PageBox.Text = "Page " .. tostring(State.Page)
             Prev.Active = State.Page > 1
             Next.Active = page.nextCursor ~= nil
@@ -1904,6 +1921,8 @@ local function previousPage()
             for _,item in ipairs(page.data) do
                 createEmoteCard(item,List,CatalogCards,false)
             end
+            EmptyLabel.Visible = #page.data == 0
+            EmptyLabel.Text = "No emotes found"
             PageBox.Text = "Page " .. tostring(State.Page)
             Prev.Active = State.Page > 1
             Next.Active = page.nextCursor ~= nil
@@ -1995,6 +2014,21 @@ renderRecent = function(keyword)
         if q == "" or tostring(item.Name):lower():find(q,1,true) then table.insert(items,item) end
     end
     renderSimpleCollection(RecentList,RecentCards,items,"No recently played emotes")
+end
+
+-- Refresh only the local collection views. This is intentionally separate from
+-- catalog loading so favoriting/saving never causes a Roblox catalog request.
+refreshCollectionViews = function()
+    rebuildSavedSet()
+    rebuildFavoriteSet()
+
+    if State.Tab == "Saved" then
+        renderSaved(SavedSearch.Text or "")
+    elseif State.Tab == "Favorites" then
+        renderFavorites("")
+    elseif State.Tab == "Recent" then
+        renderRecent("")
+    end
 end
 
 --==============================================================
