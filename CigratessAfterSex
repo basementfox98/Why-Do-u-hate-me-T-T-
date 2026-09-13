@@ -1,5 +1,5 @@
 --[[
-    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V36 FRIEND CLOUD
+    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V34 HISTORY IMPROVEMENTS
     Compact rebuild based on the supplied GazeOld + Saiki Music references.
 
     INCLUDED FROM GAZE:
@@ -21,7 +21,7 @@
     • Per-emote keyboard keybinds
     • Keybind persistence / conflict detection
     • Recent history individual removal / replay / clear all / 20-item cap
-    • Friends: Firebase cloud friends / real requests / live presence / emote sync / auto settings
+    • Friends: server-friend list / play / sync snapshot / request code / auto settings
     • Clear search button
     • Custom Animation ID
     • Speed
@@ -51,6 +51,10 @@
 --==============================================================
 -- SERVICES / SAFE BOOT
 --==============================================================
+-- V38 SAFE BOOT: Firebase/cloud networking is intentionally not initialized here.
+-- The core GUI must load independently; cloud integration will be added only after
+-- the base build is confirmed working. This avoids startup failures from executor HTTP.
+
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
@@ -145,16 +149,6 @@ local State = {
         SyncEmote = true,
     },
     SelectedFriend = nil,
-
-    CloudFriends = {},
-    CloudIncomingRequests = {},
-    CloudIncomingSyncs = {},
-    CloudReady = false,
-    CloudAuthToken = nil,
-    CloudSyncPartner = nil,
-    CloudLastPresence = 0,
-    CloudLastFriendPoll = 0,
-    CloudLastSyncPoll = 0,
 
     GradientTime = 0,
 }
@@ -272,10 +266,6 @@ end
 
 local saveData
 local rebuildKeybindIndex
-local Gui
-local showFriendPrompt
-local showSyncPrompt
-local stopCurrentEmote
 
 local function addSearchHistory(keyword)
     keyword = tostring(keyword or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -565,21 +555,39 @@ loadSaved()
 --==============================================================
 -- FRIEND FEATURES
 --==============================================================
--- V35 local server-friend behavior is preserved as a fallback. When the
--- Firebase cloud is configured, friends are also stored across sessions and
--- can send real friend/sync requests through the shared database.
+-- Client-only limitation:
+-- Roblox does not expose a general client-to-client friend-emote request
+-- transport. These controls therefore use the local server-friend list,
+-- inspect a friend's currently playing animation, and create a shareable
+-- request code instead of inventing a RemoteEvent/Firebase protocol.
 local renderFriends
 
 local function isServerFriend(other)
     if not other or other == player then return false end
-    local ok,result = pcall(function() return player:IsFriendsWith(other.UserId) end)
+    local ok,result = pcall(function()
+        return player:IsFriendsWith(other.UserId)
+    end)
     return ok and result == true
+end
+
+local function getFriendPlayers()
+    local result = {}
+    for _,other in ipairs(Players:GetPlayers()) do
+        if isServerFriend(other) then
+            table.insert(result,other)
+        end
+    end
+    table.sort(result,function(a,b)
+        return tostring(a.DisplayName):lower() < tostring(b.DisplayName):lower()
+    end)
+    return result
 end
 
 local function getFriendCurrentAnimation(other)
     if not other or not other.Character then return nil end
     local humanoid = other.Character:FindFirstChildOfClass("Humanoid")
     if not humanoid then return nil end
+
     local best
     pcall(function()
         for _,track in ipairs(humanoid:GetPlayingAnimationTracks()) do
@@ -587,7 +595,13 @@ local function getFriendCurrentAnimation(other)
             local id = animation and numericId(animation.AnimationId)
             if id and track.IsPlaying then
                 if not best or track.Priority.Value > best.Priority.Value then
-                    best = {Id=id,Name="Friend Emote",TimePosition=tonumber(track.TimePosition) or 0,Length=tonumber(track.Length) or 0,Priority=track.Priority}
+                    best = {
+                        Id = id,
+                        Name = "Friend Emote",
+                        TimePosition = tonumber(track.TimePosition) or 0,
+                        Length = tonumber(track.Length) or 0,
+                        Priority = track.Priority,
+                    }
                 end
             end
         end
@@ -595,16 +609,23 @@ local function getFriendCurrentAnimation(other)
     return best
 end
 
-local function playFriendSnapshot(other,syncPosition)
+local function playFriendSnapshot(other, syncPosition)
     local snap = getFriendCurrentAnimation(other)
-    if not snap then toast("No playable animation found"); return false end
-    local ok = playEmote(snap.Id,tostring(other.DisplayName) .. " • Friend Emote")
+    if not snap then
+        toast("No playable animation found")
+        return false
+    end
+
+    local ok = playEmote(snap.Id, tostring(other.DisplayName) .. " • Friend Emote")
     if not ok then return false end
+
     if syncPosition ~= false then
         task.defer(function()
-            local track=State.CurrentTrack
+            local track = State.CurrentTrack
             if track and snap.Length > 0 then
-                pcall(function() track.TimePosition=math.clamp(snap.TimePosition/snap.Length,0,1)*track.Length end)
+                pcall(function()
+                    track.TimePosition = math.clamp(snap.TimePosition / snap.Length,0,1) * track.Length
+                end)
             end
         end)
     end
@@ -612,106 +633,156 @@ local function playFriendSnapshot(other,syncPosition)
     return true
 end
 
-local function requestCloudFriend(other)
-    if not State.CloudReady then
-        toast("Configure Saiki Firebase first")
+local function copyFriendRequest(other)
+    local snap = getFriendCurrentAnimation(other)
+    if not snap then
+        toast("Friend is not playing an emote")
         return
     end
-    cloudSendFriendRequest(other.UserId)
-end
 
-local function requestCloudSync(other)
-    if not State.CloudReady then
-        toast("Configure Saiki Firebase first")
-        return
-    end
-    cloudSendSyncRequest(other.UserId)
-end
-
-local function renderFriends()
-    if not FriendsList then return end
-    FriendsInfo.Text = State.CloudReady and "CLOUD FRIENDS • REQUEST / SYNC / PLAY" or "ROBLOX FRIENDS • CONFIGURE FIREBASE FOR CLOUD"
-    for _,child in ipairs(FriendsList:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
-    end
-
-    local records = {}
-    local seen = {}
-    -- Cloud friends first.
-    for uid,profile in pairs(State.CloudFriends) do
-        seen[tostring(uid)] = true
-        table.insert(records,{userId=tostring(uid),displayName=profile.displayName or profile.username or uid,username=profile.username or uid,online=profile.online==true,player=profile.localPlayer})
-    end
-    -- Preserve useful V35 local fallback even before cloud setup.
-    for _,other in ipairs(Players:GetPlayers()) do
-        if isServerFriend(other) and not seen[tostring(other.UserId)] then
-            table.insert(records,{userId=tostring(other.UserId),displayName=other.DisplayName,username=other.Name,online=true,player=other,localFriend=true})
-        end
-    end
-    table.sort(records,function(a,b) return tostring(a.displayName):lower() < tostring(b.displayName):lower() end)
-
-    local count=0
-    for _,record in ipairs(records) do
-        count += 1
-        local row=create("Frame",{Size=UDim2.new(1,-12,0,58),BackgroundColor3=State.Dark and Color3.fromRGB(31,27,36) or Color3.fromRGB(251,248,253),BorderSizePixel=0,LayoutOrder=count,ZIndex=6},FriendsList)
-        corner(row,10); stroke(row,Color3.fromRGB(220,205,230),1,0.18)
-        local avatar=create("ImageLabel",{Size=UDim2.fromOffset(42,42),Position=UDim2.fromOffset(7,8),BackgroundTransparency=1,Image="rbxthumb://type=AvatarHeadShot&id="..tostring(record.userId).."&w=150&h=150",ScaleType=Enum.ScaleType.Fit,ZIndex=7},row); corner(avatar,21)
-        local name=create("TextLabel",{Size=UDim2.new(1,-215,0,18),Position=UDim2.fromOffset(57,6),BackgroundTransparency=1,Text=tostring(record.displayName),TextColor3=State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(65,55,75),Font=Enum.Font.GothamBold,TextSize=9,TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd,ZIndex=7},row)
-        local username=create("TextLabel",{Size=UDim2.new(1,-215,0,15),Position=UDim2.fromOffset(57,24),BackgroundTransparency=1,Text="@"..tostring(record.username),TextColor3=State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),Font=Enum.Font.Gotham,TextSize=7,TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd,ZIndex=7},row)
-        local statusText = record.online and "Online" or "Offline"
-        local localPlayer = record.player
-        local cloudProfile = State.CloudFriends[tostring(record.userId)]
-        if localPlayer then
-            local snap=getFriendCurrentAnimation(localPlayer)
-            statusText = snap and "Playing an emote" or "Online • no emote"
-        elseif cloudProfile and cloudProfile.activeEmote then
-            statusText = "Playing an emote"
-        end
-        local status=create("TextLabel",{Size=UDim2.new(1,-215,0,13),Position=UDim2.fromOffset(57,39),BackgroundTransparency=1,Text=statusText,TextColor3=State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),Font=Enum.Font.GothamMedium,TextSize=6.5,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=7},row)
-        local sync=makeButton(row,"SYNC",UDim2.new(1,-98,0,8),UDim2.fromOffset(43,20)); sync.TextSize=6.5; sync.ZIndex=8
-        local req=makeButton(row,"REQ",UDim2.new(1,-49,0,8),UDim2.fromOffset(43,20)); req.TextSize=6.5; req.ZIndex=8
-
-        sync.MouseButton1Click:Connect(function()
-            State.SelectedFriend=tonumber(record.userId) or record.userId
-            if not State.FriendSettings.SyncEmote then toast("Friend sync is disabled"); return end
-            if State.CloudReady then
-                requestCloudSync(record)
-            elseif localPlayer then
-                playFriendSnapshot(localPlayer,true)
-            else
-                toast("Configure Saiki Firebase first")
-            end
-        end)
-        req.MouseButton1Click:Connect(function()
-            State.SelectedFriend=tonumber(record.userId) or record.userId
-            if State.CloudReady then
-                requestCloudFriend(record)
-            else
-                toast("Configure Saiki Firebase first")
-            end
-        end)
-    end
-
-    local empty=FriendsList.Parent:FindFirstChild("FriendsEmpty")
-    if count==0 then
-        if not empty then
-            empty=create("TextLabel",{Name="FriendsEmpty",Size=UDim2.new(1,-20,0,50),Position=UDim2.new(0,10,0.5,-25),BackgroundTransparency=1,Text="No cloud or Roblox friends found.",TextColor3=State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(115,105,125),Font=Enum.Font.GothamBold,TextSize=11,TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Center,ZIndex=20},FriendsList.Parent)
-        end
-        empty.Visible=true
-    elseif empty then
-        empty.Visible=false
+    local requestCode = "SAIKI_EMOTE_REQUEST|" .. tostring(other.UserId) .. "|" .. tostring(snap.Id)
+    if safeSetClipboard(requestCode) then
+        toast("Friend request code copied")
+    else
+        toast("Request code • " .. tostring(snap.Id))
     end
 end
 
 local function setFriendSetting(key,value)
-    State.FriendSettings[key]=value==true
+    State.FriendSettings[key] = value == true
     saveData()
+end
+
+local function renderFriends()
+    if not FriendsList then return end
+
+    for _,child in ipairs(FriendsList:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    local friends = getFriendPlayers()
+    local count = 0
+
+    for _,other in ipairs(friends) do
+        count += 1
+
+        local row = create("Frame", {
+            Size = UDim2.new(1,-12,0,58),
+            BackgroundColor3 = State.Dark and Color3.fromRGB(31,27,36) or Color3.fromRGB(251,248,253),
+            BorderSizePixel = 0,
+            LayoutOrder = count,
+            ZIndex = 6,
+        }, FriendsList)
+        corner(row,10)
+        stroke(row,Color3.fromRGB(220,205,230),1,0.18)
+
+        local avatar = create("ImageLabel", {
+            Size = UDim2.fromOffset(42,42),
+            Position = UDim2.fromOffset(7,8),
+            BackgroundTransparency = 1,
+            Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(other.UserId) .. "&w=150&h=150",
+            ScaleType = Enum.ScaleType.Fit,
+            ZIndex = 7,
+        }, row)
+        corner(avatar,21)
+
+        local name = create("TextLabel", {
+            Size = UDim2.new(1,-210,0,18),
+            Position = UDim2.fromOffset(57,6),
+            BackgroundTransparency = 1,
+            Text = tostring(other.DisplayName),
+            TextColor3 = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(65,55,75),
+            Font = Enum.Font.GothamBold,
+            TextSize = 9,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            ZIndex = 7,
+        }, row)
+
+        local username = create("TextLabel", {
+            Size = UDim2.new(1,-210,0,15),
+            Position = UDim2.fromOffset(57,24),
+            BackgroundTransparency = 1,
+            Text = "@" .. tostring(other.Name),
+            TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),
+            Font = Enum.Font.Gotham,
+            TextSize = 7,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            ZIndex = 7,
+        }, row)
+
+        local snapshot = getFriendCurrentAnimation(other)
+        local status = create("TextLabel", {
+            Size = UDim2.new(1,-210,0,13),
+            Position = UDim2.fromOffset(57,39),
+            BackgroundTransparency = 1,
+            Text = snapshot and "Playing an animation" or "Not playing an emote",
+            TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),
+            Font = Enum.Font.GothamMedium,
+            TextSize = 6.5,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 7,
+        }, row)
+
+        local play = makeButton(row,"PLAY",UDim2.new(1,-145,0,8),UDim2.fromOffset(43,20))
+        play.TextSize = 6.5
+        play.ZIndex = 8
+        local sync = makeButton(row,"SYNC",UDim2.new(1,-97,0,8),UDim2.fromOffset(43,20))
+        sync.TextSize = 6.5
+        sync.ZIndex = 8
+        local request = makeButton(row,"REQ",UDim2.new(1,-49,0,8),UDim2.fromOffset(43,20))
+        request.TextSize = 6.5
+        request.ZIndex = 8
+
+        play.MouseButton1Click:Connect(function()
+            State.SelectedFriend = other.UserId
+            playFriendSnapshot(other,false)
+        end)
+
+        sync.MouseButton1Click:Connect(function()
+            State.SelectedFriend = other.UserId
+            if State.FriendSettings.SyncEmote then
+                playFriendSnapshot(other,true)
+            else
+                toast("Friend sync is disabled")
+            end
+        end)
+
+        request.MouseButton1Click:Connect(function()
+            State.SelectedFriend = other.UserId
+            copyFriendRequest(other)
+        end)
+    end
+
+    if count == 0 then
+        local empty = FriendsList.Parent:FindFirstChild("FriendsEmpty")
+        if not empty then
+            empty = create("TextLabel", {
+                Name = "FriendsEmpty",
+                Size = UDim2.new(1,-20,0,50),
+                Position = UDim2.new(0,10,0.5,-25),
+                BackgroundTransparency = 1,
+                Text = "No friends are currently in this server.",
+                TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(115,105,125),
+                Font = Enum.Font.GothamBold,
+                TextSize = 11,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Center,
+                ZIndex = 20,
+            }, FriendsList.Parent)
+        end
+        empty.Visible = true
+    else
+        local empty = FriendsList.Parent:FindFirstChild("FriendsEmpty")
+        if empty then empty.Visible = false end
+    end
 end
 
 --==============================================================
 -- GUI
 --==============================================================
-Gui = create("ScreenGui", {
+local Gui = create("ScreenGui", {
     Name = "SAIKI_EMOTES_GUI",
     ResetOnSpawn = false,
     IgnoreGuiInset = true,
@@ -808,401 +879,6 @@ local function getRequestFunction()
     if type(http_request) == "function" then return http_request end
     if type(request) == "function" then return request end
 end
-
---==============================================================
--- SAIKI FRIEND CLOUD — FIREBASE REALTIME DATABASE REST
---==============================================================
--- Firebase configuration. The GUI must never depend on getgenv existing.
--- If getgenv is available, the configured values below can still be overridden.
--- Firebase Authentication must have Anonymous sign-in enabled.
--- This never uses Vexro's server, URL, or shared secret.
-local _getgenv = type(getgenv) == "function" and getgenv or function() return {} end
-local _cfg = _getgenv()
-local SAIKI_FIREBASE_DATABASE_URL = tostring(_cfg.SAIKI_FIREBASE_DATABASE_URL or "")
-local SAIKI_FIREBASE_API_KEY = tostring(_cfg.SAIKI_FIREBASE_API_KEY or "")
-local FirebaseAuthToken
-local FirebaseRefreshToken
-local FirebaseLocalId
-local FirebaseLastTokenRefresh = 0
-
-local function firebaseConfigured()
-    return SAIKI_FIREBASE_DATABASE_URL ~= "" and SAIKI_FIREBASE_API_KEY ~= ""
-        and not SAIKI_FIREBASE_DATABASE_URL:find("YOUR%-PROJECT",1,true)
-        and not SAIKI_FIREBASE_API_KEY:find("YOUR",1,true)
-end
-
-local function firebaseUrl(path)
-    local base = SAIKI_FIREBASE_DATABASE_URL:gsub("/$","")
-    return base .. "/saikiEmotes/" .. tostring(path):gsub("^/","") .. ".json"
-end
-
-local function firebaseRequest(method,path,body,token)
-    if not firebaseConfigured() then return nil,"Firebase is not configured" end
-    local requestFn = getRequestFunction()
-    if not requestFn then return nil,"Executor HTTP request is unavailable" end
-
-    local url = firebaseUrl(path)
-    if token and token ~= "" then
-        url = url .. "?auth=" .. HttpService:UrlEncode(token)
-    end
-
-    local ok,res = pcall(function()
-        local req = {
-            Url = url,
-            Method = method,
-            Headers = { ["Content-Type"] = "application/json", Accept = "application/json" },
-        }
-        if method ~= "GET" and method ~= "HEAD" then
-            req.Body = HttpService:JSONEncode(body or {})
-        end
-        return requestFn(req)
-    end)
-    if not ok or not res then return nil,"Firebase request failed" end
-
-    local status = tonumber(res.StatusCode) or 0
-    local raw = tostring(res.Body or "")
-    if status < 200 or status >= 300 then
-        return nil,"Firebase HTTP " .. tostring(status)
-    end
-    if raw == "" or raw == "null" then return true end
-
-    local decodedOk,decoded = pcall(function() return HttpService:JSONDecode(raw) end)
-    if decodedOk then return decoded end
-    return true
-end
-
-local function firebaseAuth()
-    if not firebaseConfigured() then return false,"Firebase is not configured" end
-    if FirebaseAuthToken and (os.clock() - FirebaseLastTokenRefresh) < 3300 then return true end
-
-    local requestFn = getRequestFunction()
-    if not requestFn then return false,"Executor HTTP request is unavailable" end
-
-    local url = "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" .. HttpService:UrlEncode(SAIKI_FIREBASE_API_KEY)
-    local ok,res = pcall(function()
-        return requestFn({
-            Url = url,
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body = HttpService:JSONEncode({returnSecureToken=true}),
-        })
-    end)
-    if not ok or not res then return false,"Firebase anonymous sign-in failed" end
-
-    local status = tonumber(res.StatusCode) or 0
-    if status < 200 or status >= 300 then
-        return false,"Firebase auth HTTP " .. tostring(status)
-    end
-    local decodedOk,data = pcall(function() return HttpService:JSONDecode(tostring(res.Body or "")) end)
-    if not decodedOk or type(data) ~= "table" or not data.idToken then
-        return false,"Firebase anonymous auth is disabled or invalid" 
-    end
-
-    FirebaseAuthToken = tostring(data.idToken)
-    FirebaseRefreshToken = tostring(data.refreshToken or "")
-    FirebaseLocalId = tostring(data.localId or "")
-    FirebaseLastTokenRefresh = os.clock()
-    State.CloudAuthToken = FirebaseAuthToken
-    return true
-end
-
-local function firebaseAuthedRequest(method,path,body)
-    local ok,err = firebaseAuth()
-    if not ok then return nil,err end
-    return firebaseRequest(method,path,body,FirebaseAuthToken)
-end
-
-local function cloudProfilePath(userId)
-    return "profiles/" .. tostring(userId)
-end
-
-local function cloudFriendPath(userId,friendId)
-    if friendId == nil or tostring(friendId) == "" then
-        return "friends/" .. tostring(userId)
-    end
-    return "friends/" .. tostring(userId) .. "/" .. tostring(friendId)
-end
-
-local function cloudNow()
-    local ok,t = pcall(function() return workspace:GetServerTimeNow() end)
-    return ok and tonumber(t) or os.time()
-end
-
-local function cloudWritePresence(activeEmote)
-    if not State.CloudReady then return end
-    local payload = {
-        userId = tostring(player.UserId),
-        username = tostring(player.Name),
-        displayName = tostring(player.DisplayName),
-        authUid = tostring(FirebaseLocalId or ""),
-        online = true,
-        lastSeen = cloudNow(),
-        activeEmote = activeEmote,
-    }
-    firebaseAuthedRequest("PUT",cloudProfilePath(player.UserId),payload)
-end
-
-local function cloudReadFriends()
-    local data,err = firebaseAuthedRequest("GET",cloudFriendPath(player.UserId,""))
-    if type(data) ~= "table" then return nil,err end
-    local result = {}
-    for uid,value in pairs(data) do
-        if value == true or type(value) == "table" then
-            result[tostring(uid)] = true
-        end
-    end
-    return result
-end
-
-local function cloudReadProfiles(friendIds)
-    local result = {}
-    for _,uid in ipairs(friendIds) do
-        local data = firebaseAuthedRequest("GET",cloudProfilePath(uid))
-        if type(data) == "table" then
-            result[tostring(uid)] = data
-        end
-        task.wait()
-    end
-    return result
-end
-
-local function cloudRequestId(prefix)
-    return tostring(prefix) .. "_" .. tostring(player.UserId) .. "_" .. tostring(math.floor(os.clock()*1000)) .. "_" .. tostring(math.random(1000,9999))
-end
-
-local function cloudMakeFriends(a,b)
-    local payload = true
-    firebaseAuthedRequest("PUT",cloudFriendPath(a,b),payload)
-    firebaseAuthedRequest("PUT",cloudFriendPath(b,a),payload)
-end
-
-local function cloudSendFriendRequestTo(userId)
-    local requestId = cloudRequestId("friend")
-    local request = {
-        id = requestId,
-        fromId = tostring(player.UserId),
-        fromUsername = tostring(player.Name),
-        fromDisplayName = tostring(player.DisplayName),
-        targetId = tostring(userId),
-        createdAt = cloudNow(),
-        status = "pending",
-    }
-    local data,err = firebaseAuthedRequest("PUT","requests/" .. tostring(userId) .. "/" .. requestId,request)
-    if data == nil and err then toast("Friend request failed • " .. err) else toast("Friend request sent") end
-end
-
-cloudSendFriendRequest = cloudSendFriendRequestTo
-
-local function cloudRespondFriendRequest(request,accepted)
-    if type(request) ~= "table" then return end
-    local fromId = tostring(request.fromId or "")
-    if fromId == "" then return end
-    if accepted then
-        cloudMakeFriends(player.UserId,fromId)
-        toast("Friend request accepted")
-    else
-        toast("Friend request declined")
-    end
-    firebaseAuthedRequest("DELETE","requests/" .. tostring(player.UserId) .. "/" .. tostring(request.id))
-end
-
-cloudRespondFriendRequest = cloudRespondFriendRequest
-
-local function cloudSendSyncRequestTo(userId)
-    if not State.FriendSettings.SyncEmote then
-        toast("Friend sync is disabled")
-        return
-    end
-    local track = State.CurrentTrack
-    local id = State.Selected and numericId(State.Selected.Id or State.Selected.AssetId)
-    if not track or not id then
-        toast("Play an emote first")
-        return
-    end
-    local syncId = cloudRequestId("sync")
-    local payload = {
-        id = syncId,
-        fromId = tostring(player.UserId),
-        fromUsername = tostring(player.Name),
-        fromDisplayName = tostring(player.DisplayName),
-        targetId = tostring(userId),
-        emoteId = tostring(id),
-        emoteName = tostring(State.Selected.Name or ("Emote " .. id)),
-        startTime = cloudNow(),
-        timePosition = tonumber(track.TimePosition) or 0,
-        length = tonumber(track.Length) or 0,
-        createdAt = cloudNow(),
-        status = "pending",
-    }
-    local data,err = firebaseAuthedRequest("PUT","syncRequests/" .. tostring(userId) .. "/" .. syncId,payload)
-    if data == nil and err then
-        toast("Sync request failed • " .. err)
-    else
-        State.CloudSyncPartner = tostring(userId)
-        toast("Sync request sent")
-    end
-end
-
-cloudSendSyncRequest = cloudSendSyncRequestTo
-
-local function cloudStopSyncFor(userId)
-    if not userId then return end
-    local payload = {
-        userId = tostring(player.UserId),
-        activeEmote = nil,
-        stoppedAt = cloudNow(),
-    }
-    firebaseAuthedRequest("PUT","syncStop/" .. tostring(userId),payload)
-end
-cloudStopSync = cloudStopSyncFor
-
-local function cloudStart()
-    if not firebaseConfigured() then return end
-    local ok,err = firebaseAuth()
-    if not ok then
-        toast("Firebase unavailable • configure cloud settings")
-        return
-    end
-    State.CloudReady = true
-    cloudWritePresence(nil)
-end
-
-local function cloudStop()
-    if not State.CloudReady then return end
-    pcall(function()
-        firebaseAuthedRequest("PUT",cloudProfilePath(player.UserId),{
-            userId=tostring(player.UserId),username=tostring(player.Name),displayName=tostring(player.DisplayName),authUid=tostring(FirebaseLocalId or ""),online=false,lastSeen=cloudNow(),activeEmote=nil
-        })
-    end)
-end
-
-local function cloudRefreshFriends()
-    if not State.CloudReady then return end
-    local friends = cloudReadFriends()
-    if type(friends) ~= "table" then return end
-    local ids = {}
-    for uid in pairs(friends) do table.insert(ids,uid) end
-    local profiles = cloudReadProfiles(ids)
-    State.CloudFriends = {}
-    for _,uid in ipairs(ids) do
-        local profile = profiles[uid] or {userId=uid,username=uid,displayName=uid,online=false}
-        profile.userId = tostring(uid)
-        local localPlayer = Players:GetPlayerByUserId(tonumber(uid) or -1)
-        if localPlayer then
-            profile.username = localPlayer.Name
-            profile.displayName = localPlayer.DisplayName
-            profile.online = true
-            profile.localPlayer = localPlayer
-        else
-            local lastSeen = tonumber(profile.lastSeen) or 0
-            profile.online = profile.online == true and (cloudNow() - lastSeen) < 12
-        end
-        State.CloudFriends[uid] = profile
-    end
-    State.CloudLastFriendPoll = os.clock()
-    if State.Tab == "Friends" then renderFriends() end
-end
-
-local function cloudPollIncoming()
-    if not State.CloudReady then return end
-    local requests = firebaseAuthedRequest("GET","requests/" .. tostring(player.UserId))
-    State.CloudIncomingRequests = {}
-    if type(requests) == "table" then
-        for id,request in pairs(requests) do
-            if type(request) == "table" then
-                request.id = request.id or id
-                table.insert(State.CloudIncomingRequests,request)
-            end
-        end
-    end
-
-    if #State.CloudIncomingRequests > 0 then
-        local first = State.CloudIncomingRequests[1]
-        if State.FriendSettings.AutoReject then
-            cloudRespondFriendRequest(first,false)
-        elseif State.FriendSettings.AutoAccept then
-            cloudRespondFriendRequest(first,true)
-        else
-            if tostring(first.id) ~= tostring(LastFriendPromptId) then
-                LastFriendPromptId = tostring(first.id)
-                if showFriendPrompt then showFriendPrompt(first) else toast("Incoming friend request from " .. tostring(first.fromDisplayName or first.fromUsername or first.fromId)) end
-            end
-        end
-    end
-end
-
-local function cloudPollSync()
-    if not State.CloudReady or not State.FriendSettings.SyncEmote then return end
-
-    if State.CloudSyncPartner then
-        local stopSignal = firebaseAuthedRequest("GET","syncStop/" .. tostring(player.UserId))
-        if type(stopSignal) == "table" and tostring(stopSignal.userId or "") == tostring(State.CloudSyncPartner) then
-            State.CloudSyncPartner = nil
-            if State.CurrentTrack then stopCurrentEmote() else State.CurrentTrack=nil end
-            toast("Friend stopped the synced emote")
-        end
-    end
-
-    local incoming = firebaseAuthedRequest("GET","syncRequests/" .. tostring(player.UserId))
-    State.CloudIncomingSyncs = {}
-    if type(incoming) == "table" then
-        for id,req in pairs(incoming) do
-            if type(req) == "table" then
-                req.id = req.id or id
-                table.insert(State.CloudIncomingSyncs,req)
-            end
-        end
-    end
-    if #State.CloudIncomingSyncs > 0 then
-        local req = State.CloudIncomingSyncs[1]
-        if State.FriendSettings.AutoReject then
-            firebaseAuthedRequest("DELETE","syncRequests/" .. tostring(player.UserId) .. "/" .. tostring(req.id))
-        elseif State.FriendSettings.AutoAccept then
-            firebaseAuthedRequest("DELETE","syncRequests/" .. tostring(player.UserId) .. "/" .. tostring(req.id))
-            local id = numericId(req.emoteId)
-            if id then
-                playEmote(id,tostring(req.emoteName or ("Friend Emote")),false)
-                task.defer(function()
-                    local track = State.CurrentTrack
-                    if track and tonumber(req.length) and tonumber(req.length) > 0 then
-                        local ratio = math.clamp((tonumber(req.timePosition) or 0) / tonumber(req.length),0,1)
-                        pcall(function() track.TimePosition = ratio * track.Length end)
-                    end
-                end)
-                State.CloudSyncPartner = tostring(req.fromId)
-            end
-        else
-            if tostring(req.id) ~= tostring(LastSyncPromptId) then
-                LastSyncPromptId = tostring(req.id)
-                if showSyncPrompt then showSyncPrompt(req) else toast("Incoming emote sync from " .. tostring(req.fromDisplayName or req.fromUsername or req.fromId)) end
-            end
-        end
-    end
-end
-
--- Lightweight cloud polling: only active while Friends is open or a sync partner exists.
-task.spawn(function()
-    while task.wait(2.5) do
-        if not Gui or not Gui.Parent then break end
-        if State.CloudReady then
-            if State.Tab == "Friends" and os.clock() - State.CloudLastFriendPoll >= 4 then
-                pcall(cloudRefreshFriends)
-                pcall(cloudPollIncoming)
-            end
-            if State.CloudSyncPartner or State.Tab == "Friends" then
-                pcall(cloudPollSync)
-            end
-            if os.clock() - State.CloudLastPresence >= 5 then
-                State.CloudLastPresence = os.clock()
-                local active = nil
-                if State.CurrentTrack and State.Selected then
-                    active = {id=numericId(State.Selected.Id or State.Selected.AssetId),name=tostring(State.Selected.Name or "Emote"),timePosition=tonumber(State.CurrentTrack.TimePosition) or 0,length=tonumber(State.CurrentTrack.Length) or 0,updatedAt=cloudNow()}
-                end
-                pcall(function() cloudWritePresence(active) end)
-            end
-        end
-    end
-end)
 
 local function loadRemoteImage(url, fileName)
     local requestFn = getRequestFunction()
@@ -1315,73 +991,6 @@ local function makeButton(parent, text, position, size)
     stroke(b, Color3.fromRGB(215,195,225), 1, 0.2)
     return b
 end
-
--- Reusable friend request prompt. It is created once and reused for incoming requests.
-local FriendPrompt = create("Frame", {Name="FriendPrompt",Size=UDim2.fromOffset(330,120),Position=UDim2.fromScale(0.5,0.5),AnchorPoint=Vector2.new(0.5,0.5),BackgroundColor3=Color3.fromRGB(255,255,255),Visible=false,ZIndex=180},Main)
-corner(FriendPrompt,14); stroke(FriendPrompt,Color3.fromRGB(220,205,230),1.2,0.1)
-local FriendPromptTitle = create("TextLabel", {Size=UDim2.new(1,-20,0,28),Position=UDim2.fromOffset(10,8),BackgroundTransparency=1,Text="Friend request",Font=Enum.Font.GothamBold,TextSize=12,TextColor3=Color3.fromRGB(55,47,65),TextXAlignment=Enum.TextXAlignment.Left,ZIndex=181},FriendPrompt)
-local FriendPromptBody = create("TextLabel", {Size=UDim2.new(1,-20,0,35),Position=UDim2.fromOffset(10,36),BackgroundTransparency=1,Text="",Font=Enum.Font.Gotham,TextSize=9,TextColor3=Color3.fromRGB(116,108,130),TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=181},FriendPrompt)
-local FriendAccept = makeButton(FriendPrompt,"ACCEPT",UDim2.new(1,-190,1,-34),UDim2.fromOffset(82,25)); FriendAccept.TextSize=7; FriendAccept.ZIndex=182
-local FriendDecline = makeButton(FriendPrompt,"DECLINE",UDim2.new(1,-100,1,-34),UDim2.fromOffset(82,25)); FriendDecline.TextSize=7; FriendDecline.ZIndex=182
-local PendingFriendPrompt
-local PendingSyncPrompt
-local LastFriendPromptId
-local LastSyncPromptId
-
-showFriendPrompt = function(request)
-    PendingFriendPrompt = request
-    FriendPromptTitle.Text = "Friend request"
-    FriendPromptBody.Text = tostring(request.fromDisplayName or request.fromUsername or request.fromId) .. " wants to add you as a Saiki Emotes friend."
-    FriendAccept.Text = "ACCEPT"
-    FriendDecline.Text = "DECLINE"
-    FriendPrompt.Visible = true
-end
-
-showSyncPrompt = function(request)
-    PendingSyncPrompt = request
-    FriendPromptTitle.Text = "Emote sync request"
-    FriendPromptBody.Text = tostring(request.fromDisplayName or request.fromUsername or request.fromId) .. " wants to sync " .. tostring(request.emoteName or "an emote") .. " with you."
-    FriendAccept.Text = "SYNC"
-    FriendDecline.Text = "DECLINE"
-    FriendPrompt.Visible = true
-end
-
-FriendAccept.MouseButton1Click:Connect(function()
-    if PendingFriendPrompt then
-        local req=PendingFriendPrompt; PendingFriendPrompt=nil; LastFriendPromptId=nil
-        cloudRespondFriendRequest(req,true)
-        FriendPrompt.Visible=false
-        pcall(cloudRefreshFriends)
-    elseif PendingSyncPrompt then
-        local req=PendingSyncPrompt; PendingSyncPrompt=nil; LastSyncPromptId=nil
-        firebaseAuthedRequest("DELETE","syncRequests/" .. tostring(player.UserId) .. "/" .. tostring(req.id))
-        local id=numericId(req.emoteId)
-        if id then
-            playEmote(id,tostring(req.emoteName or "Friend Emote"),false)
-            task.defer(function()
-                local track=State.CurrentTrack
-                local len=tonumber(req.length) or 0
-                if track and len>0 then
-                    local ratio=math.clamp((tonumber(req.timePosition) or 0)/len,0,1)
-                    pcall(function() track.TimePosition=ratio*track.Length end)
-                end
-            end)
-            State.CloudSyncPartner=tostring(req.fromId)
-        end
-        FriendPrompt.Visible=false
-    end
-end)
-
-FriendDecline.MouseButton1Click:Connect(function()
-    if PendingFriendPrompt then
-        local req=PendingFriendPrompt; PendingFriendPrompt=nil; LastFriendPromptId=nil
-        cloudRespondFriendRequest(req,false)
-    elseif PendingSyncPrompt then
-        local req=PendingSyncPrompt; PendingSyncPrompt=nil; LastSyncPromptId=nil
-        firebaseAuthedRequest("DELETE","syncRequests/" .. tostring(player.UserId) .. "/" .. tostring(req.id))
-    end
-    FriendPrompt.Visible=false
-end)
 
 local AnchorButton = makeButton(Header,"🔓",UDim2.new(1,-96,0,10),UDim2.fromOffset(26,26))
 local ThemeButton = makeButton(Header,"🌙",UDim2.new(1,-64,0,10),UDim2.fromOffset(26,26))
@@ -1789,7 +1398,7 @@ local FriendsInfo = create("TextLabel", {
     Size = UDim2.new(1,-92,0,29),
     Position = UDim2.fromOffset(0,0),
     BackgroundTransparency = 1,
-    Text = "CLOUD FRIENDS • REQUEST / SYNC / PLAY",
+    Text = "SERVER FRIENDS • PLAY / SYNC / REQUEST",
     TextColor3 = Color3.fromRGB(116,108,130),
     Font = Enum.Font.GothamBold,
     TextSize = 8,
@@ -2071,6 +1680,8 @@ Toast = create("TextLabel", {
 }, Main)
 corner(Toast,10)
 
+local stopCurrentEmote
+
 --==============================================================
 -- PLAYBACK HUD — VEX-INSPIRED COMPACT CONTROLS
 --==============================================================
@@ -2241,13 +1852,6 @@ stopCurrentEmote = function()
     local track = State.CurrentTrack
     State.CurrentTrack = nil
     State.Paused = false
-    if State.CloudReady then
-        pcall(function() cloudWritePresence(nil) end)
-        if State.CloudSyncPartner then
-            pcall(function() cloudStopSync(State.CloudSyncPartner) end)
-            State.CloudSyncPartner = nil
-        end
-    end
 
     if track then
         pcall(function()
@@ -2283,7 +1887,7 @@ local function resolveAnimationId(assetId)
     return resolved
 end
 
-playEmote = function(assetId, name, suppressCloud)
+playEmote = function(assetId, name)
     local id = numericId(assetId)
     if not id then
         toast("Invalid emote ID")
@@ -2352,12 +1956,6 @@ playEmote = function(assetId, name, suppressCloud)
     }
 
     setPlaybackHUD(track, name or ("Emote " .. id))
-
-    if State.CloudReady and not suppressCloud then
-        pcall(function()
-            cloudWritePresence({id=id,name=tostring(name or ("Emote " .. id)),timePosition=tonumber(track.TimePosition) or 0,length=tonumber(track.Length) or 0,updatedAt=cloudNow()})
-        end)
-    end
 
     track.Stopped:Connect(function()
         if State.CurrentTrack == track then
@@ -3124,19 +2722,7 @@ PageBox.FocusLost:Connect(function(enter)
     end
 end)
 
-FriendsRefresh.MouseButton1Click:Connect(function()
-    if State.CloudReady then
-        task.spawn(function()
-            pcall(cloudRefreshFriends)
-            pcall(cloudPollIncoming)
-            pcall(cloudPollSync)
-            renderFriends()
-        end)
-    else
-        renderFriends()
-        toast("Firebase not configured")
-    end
-end)
+FriendsRefresh.MouseButton1Click:Connect(renderFriends)
 AutoAcceptButton.MouseButton1Click:Connect(function()
     local value = not State.FriendSettings.AutoAccept
     setFriendSetting("AutoAccept",value)
@@ -3324,7 +2910,6 @@ UserInputService.InputBegan:Connect(function(input,processed)
 end)
 
 CloseButton.MouseButton1Click:Connect(function()
-    pcall(cloudStop)
     cancelKeybindCapture()
     stopCurrentEmote()
     State.Hidden = true
@@ -3540,18 +3125,8 @@ setEffectsForMain(not State.Hidden)
 --==============================================================
 -- START
 --==============================================================
--- IMPORTANT: show the GUI BEFORE any Firebase/network request.
--- A slow, blocked, or unavailable executor HTTP request must never prevent
--- the UI from appearing. Cloud startup is fully asynchronous.
 Gui.Enabled = true
 setTab("Catalog")
-
-task.spawn(function()
-    pcall(cloudStart)
-    if State.CloudReady then
-        task.delay(0.35,function() pcall(cloudRefreshFriends) end)
-    end
-end)
 
 -- Do NOT wait for Character before showing the GUI.
 -- Catalog loading also happens asynchronously.
