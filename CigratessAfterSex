@@ -220,14 +220,6 @@ end
 --==============================================================
 -- PERSISTENT SAVED / FAVORITE / RECENT EMOTES
 --==============================================================
-local function rebuildFavoriteSet()
-    State.FavoriteSet = {}
-    for _, item in ipairs(State.Favorites) do
-        local id = numericId(item.Id or item.AssetId)
-        if id then State.FavoriteSet[id] = true end
-    end
-end
-
 local function normalizeEmote(item)
     if type(item) ~= "table" then return nil end
     local id = numericId(item.Id or item.id or item.AssetId or item.assetId)
@@ -239,6 +231,25 @@ local function normalizeEmote(item)
         Name = tostring(item.Name or item.name or ("Emote " .. id)),
         AnimationId = item.AnimationId or ("rbxassetid://" .. tostring(assetId)),
     }
+end
+
+local function rebuildFavoriteSet()
+    -- V25: FavoriteSet is now the canonical in-memory favorite store.
+    -- The old Favorites array is kept only as the persistence format.
+    State.FavoriteSet = {}
+    local normalizedFavorites = {}
+    local seen = {}
+
+    for _, item in ipairs(State.Favorites or {}) do
+        local normalized = normalizeEmote(item)
+        if normalized and not seen[normalized.Id] then
+            seen[normalized.Id] = true
+            State.FavoriteSet[normalized.Id] = normalized
+            table.insert(normalizedFavorites, normalized)
+        end
+    end
+
+    State.Favorites = normalizedFavorites
 end
 
 local saveData
@@ -266,6 +277,113 @@ local function clearSearchHistory()
 end
 
 local function loadSaved()
+    State.Favorites = {}
+    State.FavoriteSet = {}
+    State.Recent = {}
+    State.SearchHistory = {}
+
+    pcall(function()
+        if type(isfile) ~= "function" or not isfile("SaikiEmotes_GazeSaved.json")
+            or type(readfile) ~= "function" then
+            return
+        end
+
+        local decoded = HttpService:JSONDecode(readfile("SaikiEmotes_GazeSaved.json"))
+        if type(decoded) ~= "table" then return end
+
+        local storedFavorites = decoded.favorites
+        if type(storedFavorites) ~= "table" then storedFavorites = decoded.Favorites end
+        if type(storedFavorites) ~= "table" then storedFavorites = decoded.favoriteEmotes end
+        if type(storedFavorites) ~= "table" then storedFavorites = {} end
+        for _, item in ipairs(storedFavorites) do
+            local normalized = normalizeEmote(item)
+            if normalized then table.insert(State.Favorites, normalized) end
+        end
+        for _, item in ipairs(decoded.recent or {}) do
+            local normalized = normalizeEmote(item)
+            if normalized then table.insert(State.Recent, normalized) end
+        end
+        for _, item in ipairs(decoded.searchHistory or {}) do
+            local q = tostring(item or "")
+            if q ~= "" then table.insert(State.SearchHistory, q) end
+        end
+    end)
+
+    rebuildFavoriteSet()
+end
+
+saveData = function()
+    rebuildFavoriteSet()
+
+    pcall(function()
+        if type(writefile) == "function" then
+            writefile("SaikiEmotes_GazeSaved.json", HttpService:JSONEncode({
+                favorites = State.Favorites,
+                recent = State.Recent,
+                searchHistory = State.SearchHistory,
+            }))
+        end
+    end)
+end
+
+local function findFavorite(id)
+    id = numericId(id)
+    if not id then return nil end
+    return State.FavoriteSet[id]
+end
+
+local function addFavorite(item)
+    local normalized = normalizeEmote(item)
+    if not normalized then return end
+    if findFavorite(normalized.Id) then return end
+
+    State.FavoriteSet[normalized.Id] = normalized
+    table.insert(State.Favorites, normalized)
+    saveData()
+    toast("Added to Favorites")
+end
+
+local function removeFavorite(id)
+    id = numericId(id)
+    if not id then return end
+    if not State.FavoriteSet[id] then return end
+
+    State.FavoriteSet[id] = nil
+    for i = #State.Favorites, 1, -1 do
+        if numericId(State.Favorites[i].Id or State.Favorites[i].AssetId) == id then
+            table.remove(State.Favorites, i)
+        end
+    end
+    saveData()
+    toast("Removed from Favorites")
+end
+
+local function toggleFavorite(item)
+    local id = numericId(item.Id or item.AssetId)
+    if not id then return end
+    if State.FavoriteSet[id] then
+        removeFavorite(id)
+    else
+        addFavorite(item)
+    end
+end
+
+local function addRecent(item)
+    local normalized = normalizeEmote(item)
+    if not normalized then return end
+    for i = #State.Recent, 1, -1 do
+        if numericId(State.Recent[i].Id or State.Recent[i].AssetId) == normalized.Id then
+            table.remove(State.Recent, i)
+        end
+    end
+    table.insert(State.Recent, 1, normalized)
+    while #State.Recent > MAX_RECENT do
+        table.remove(State.Recent)
+    end
+    saveData()
+end
+
+loadSaved()
     State.Favorites = {}
     State.Recent = {}
     State.SearchHistory = {}
@@ -1888,15 +2006,19 @@ renderFavorites = function(keyword)
     local items = {}
     local seen = {}
 
-    for _,item in ipairs(State.Favorites) do
-        local normalized = normalizeEmote(item)
-        if normalized and not seen[normalized.Id] then
-            seen[normalized.Id] = true
+    -- Render directly from the canonical FavoriteSet instead of relying on
+    -- the persistence array being in the expected shape/order.
+    for id, normalized in pairs(State.FavoriteSet) do
+        if normalized and not seen[id] then
+            seen[id] = true
             if q == "" or tostring(normalized.Name):lower():find(q,1,true) then
                 table.insert(items,normalized)
             end
         end
     end
+    table.sort(items, function(a,b)
+        return tostring(a.Name):lower() < tostring(b.Name):lower()
+    end)
 
     renderSimpleCollection(FavoritesList,FavoritesCards,items,"No favorite emotes")
     task.defer(function()
