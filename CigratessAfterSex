@@ -12,6 +12,8 @@
     • Page number entry
     • Play / Stop
     • Copy Animation ID
+    • Pause / Resume playback
+    • Compact playback HUD with progress
     • Save / Remove saved emotes
     • Favorite toggle
     • Custom Animation ID
@@ -114,6 +116,7 @@ local State = {
     CatalogPage = nil,
     CurrentTrack = nil,
     Selected = nil,
+    Paused = false,
 
     Loading = false,
     RequestId = 0,
@@ -1124,12 +1127,125 @@ Toast = create("TextLabel", {
 }, Main)
 corner(Toast,10)
 
+local stopCurrentEmote
+
+--==============================================================
+-- PLAYBACK HUD — VEX-INSPIRED COMPACT CONTROLS
+--==============================================================
+local PlaybackHUD = create("Frame", {
+    Name = "PlaybackHUD",
+    Size = UDim2.fromOffset(310,54),
+    Position = UDim2.new(0.5,-155,1,-68),
+    BackgroundColor3 = Color3.fromRGB(255,248,253),
+    BackgroundTransparency = 0.04,
+    BorderSizePixel = 0,
+    Visible = false,
+    Active = true,
+    ZIndex = 90,
+}, Gui)
+corner(PlaybackHUD,12)
+stroke(PlaybackHUD,Color3.fromRGB(220,205,230),1,0.12)
+
+local PlaybackName = create("TextLabel", {
+    Size = UDim2.fromOffset(185,18),
+    Position = UDim2.fromOffset(12,7),
+    BackgroundTransparency = 1,
+    Text = "Nothing playing",
+    Font = Enum.Font.GothamBold,
+    TextSize = 10,
+    TextColor3 = Color3.fromRGB(65,55,75),
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextTruncate = Enum.TextTruncate.AtEnd,
+    ZIndex = 91,
+}, PlaybackHUD)
+
+local PlaybackTime = create("TextLabel", {
+    Size = UDim2.fromOffset(185,13),
+    Position = UDim2.fromOffset(12,25),
+    BackgroundTransparency = 1,
+    Text = "0:00 / 0:00",
+    Font = Enum.Font.Gotham,
+    TextSize = 7,
+    TextColor3 = Color3.fromRGB(130,120,140),
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 91,
+}, PlaybackHUD)
+
+local PlaybackProgress = create("Frame", {
+    Size = UDim2.fromOffset(185,4),
+    Position = UDim2.fromOffset(12,43),
+    BackgroundColor3 = Color3.fromRGB(232,224,238),
+    BorderSizePixel = 0,
+    ZIndex = 91,
+}, PlaybackHUD)
+corner(PlaybackProgress,3)
+local PlaybackFill = create("Frame", {
+    Size = UDim2.fromScale(0,1),
+    BackgroundColor3 = Color3.fromRGB(225,105,164),
+    BorderSizePixel = 0,
+    ZIndex = 92,
+}, PlaybackProgress)
+corner(PlaybackFill,3)
+
+local PlaybackPause = makeButton(PlaybackHUD,"▶",UDim2.fromOffset(205,12),UDim2.fromOffset(38,30))
+PlaybackPause.TextSize = 11
+PlaybackPause.ZIndex = 92
+local PlaybackStop = makeButton(PlaybackHUD,"■",UDim2.fromOffset(248,12),UDim2.fromOffset(50,30))
+PlaybackStop.TextSize = 10
+PlaybackStop.ZIndex = 92
+
+local function formatPlaybackTime(seconds)
+    seconds = math.max(0, tonumber(seconds) or 0)
+    local minutes = math.floor(seconds / 60)
+    local secs = math.floor(seconds % 60)
+    return string.format("%d:%02d", minutes, secs)
+end
+
+local function setPlaybackHUD(track, name)
+    if not track then
+        PlaybackHUD.Visible = false
+        return
+    end
+    PlaybackHUD.Visible = true
+    PlaybackName.Text = tostring(name or "Emote")
+    PlaybackPause.Text = State.Paused and "▶" or "Ⅱ"
+end
+
+PlaybackPause.MouseButton1Click:Connect(function()
+    local track = State.CurrentTrack
+    if not track then
+        PlaybackHUD.Visible = false
+        return
+    end
+
+    if State.Paused then
+        State.Paused = false
+        pcall(function() track:AdjustSpeed(Settings.Speed) end)
+        PlaybackPause.Text = "Ⅱ"
+        toast("Emote resumed")
+    else
+        State.Paused = true
+        pcall(function() track:AdjustSpeed(0) end)
+        PlaybackPause.Text = "▶"
+        toast("Emote paused")
+    end
+end)
+
+PlaybackStop.MouseButton1Click:Connect(function()
+    if State.CurrentTrack then
+        stopCurrentEmote()
+        PlaybackHUD.Visible = false
+        toast("Emote stopped")
+    end
+end)
+
 --==============================================================
 -- ANIMATION PLAYBACK — FIXED
 --==============================================================
-local function stopCurrentEmote()
+stopCurrentEmote = function()
     local track = State.CurrentTrack
     State.CurrentTrack = nil
+    State.Paused = false
 
     if track then
         pcall(function()
@@ -1226,15 +1342,20 @@ local function playEmote(assetId, name)
     end)
 
     State.CurrentTrack = track
+    State.Paused = false
     State.Selected = {
         Id = id,
         AssetId = id,
         Name = tostring(name or ("Emote " .. id)),
     }
 
+    setPlaybackHUD(track, name or ("Emote " .. id))
+
     track.Stopped:Connect(function()
         if State.CurrentTrack == track then
             State.CurrentTrack = nil
+            State.Paused = false
+            PlaybackHUD.Visible = false
         end
         pcall(function() animation:Destroy() end)
     end)
@@ -1412,7 +1533,7 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
     }, card)
 
     local idLabel = create("TextLabel", {
-        Size = UDim2.fromOffset(70,13),
+        Size = UDim2.fromOffset(58,13),
         Position = UDim2.fromOffset(63,23),
         BackgroundTransparency = 1,
         Text = "ID: " .. tostring(id),
@@ -1448,8 +1569,10 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
     favorite.BackgroundTransparency = 0.08
     favorite.ZIndex = 9
 
-    local copy = makeButton(card, "ID", UDim2.fromOffset(83,24), UDim2.fromOffset(22,15))
-    copy.TextSize = 6
+    local copy = makeButton(card, "COPY", UDim2.fromOffset(122,24), UDim2.fromOffset(27,15))
+    copy.TextSize = 5.5
+    copy.AutoButtonColor = true
+    copy.BackgroundTransparency = 0.08
     copy.ZIndex = 9
 
     play.MouseButton1Click:Connect(function()
@@ -1469,7 +1592,7 @@ local function createEmoteCard(item, parent, cardTable, savedMode)
 
     copy.MouseButton1Click:Connect(function()
         if safeSetClipboard(tostring(id)) then
-            toast("Copied ID • " .. tostring(id))
+            toast("Copied animation ID • " .. tostring(id))
         else
             toast("Clipboard unavailable • ID " .. tostring(id))
         end
@@ -2043,6 +2166,9 @@ end
 local function toggleMain()
     State.Hidden = not State.Hidden
     Main.Visible = not State.Hidden
+    if PlaybackHUD then
+        PlaybackHUD.Visible = (not State.Hidden) and State.CurrentTrack ~= nil
+    end
     setEffectsForMain(not State.Hidden)
 end
 
@@ -2083,6 +2209,36 @@ CloseButton.MouseButton1Click:Connect(function()
 end)
 
 --==============================================================
+-- PLAYBACK HUD UPDATE
+--==============================================================
+RunService.RenderStepped:Connect(function()
+    local track = State.CurrentTrack
+    if not track then
+        PlaybackHUD.Visible = false
+        return
+    end
+
+    PlaybackHUD.Visible = true
+    PlaybackPause.Text = State.Paused and "▶" or "Ⅱ"
+
+    local length = 0
+    local position = 0
+    pcall(function()
+        length = tonumber(track.Length) or 0
+        position = tonumber(track.TimePosition) or 0
+    end)
+
+    local ratio = 0
+    if length > 0 then ratio = math.clamp(position / length,0,1) end
+    PlaybackFill.Size = UDim2.fromScale(ratio,1)
+    PlaybackTime.Text = formatPlaybackTime(position) .. " / " .. formatPlaybackTime(length)
+
+    if State.Selected then
+        PlaybackName.Text = tostring(State.Selected.Name or "Emote")
+    end
+end)
+
+--==============================================================
 -- MOVEMENT HANDLER
 -- IMPORTANT: does NOTHING unless StopWhenMoving is enabled.
 --==============================================================
@@ -2104,6 +2260,8 @@ RunService.RenderStepped:Connect(function()
 
         if State.CurrentTrack == track then
             State.CurrentTrack = nil
+            State.Paused = false
+            PlaybackHUD.Visible = false
         end
     end
 end)
@@ -2152,12 +2310,16 @@ applyTheme = function()
     SavedSearch.PlaceholderColor3 = muted
     List.BackgroundColor3 = listSurface
     SavedList.BackgroundColor3 = listSurface
+    PlaybackHUD.BackgroundColor3 = buttonSurface
+    PlaybackName.TextColor3 = text
+    PlaybackTime.TextColor3 = muted
+    PlaybackProgress.BackgroundColor3 = dark and Color3.fromRGB(62,55,68) or Color3.fromRGB(232,224,238)
     PageBox.BackgroundColor3 = surface
     PageBox.TextColor3 = text
     SearchIcon.Image = dark and SEARCH_WHITE or SEARCH_BLACK
     SavedSearchIcon.Image = dark and SEARCH_WHITE or SEARCH_BLACK
 
-    for _,button in ipairs({CatalogTab,SavedTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,AddIdButton,Prev,Next,AnchorButton,ThemeButton,CloseButton,SavedAddId}) do
+    for _,button in ipairs({CatalogTab,SavedTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,AddIdButton,Prev,Next,AnchorButton,ThemeButton,CloseButton,SavedAddId,PlaybackPause,PlaybackStop}) do
         button.BackgroundColor3 = buttonSurface
         button.TextColor3 = text
     end
