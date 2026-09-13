@@ -21,6 +21,7 @@
     • Per-emote keyboard keybinds
     • Keybind persistence / conflict detection
     • Recent history individual removal / replay / clear all / 20-item cap
+    • Friends: server-friend list / play / sync snapshot / request code / auto settings
     • Clear search button
     • Custom Animation ID
     • Speed
@@ -137,6 +138,13 @@ local State = {
     KeybindByKey = {},   -- [KeyCode.Name] = emoteId number
     KeybindCaptureId = nil,
     KeybindCaptureButton = nil,
+
+    FriendSettings = {
+        AutoAccept = false,
+        AutoReject = false,
+        SyncEmote = true,
+    },
+    SelectedFriend = nil,
 
     GradientTime = 0,
 }
@@ -314,6 +322,13 @@ local function loadSaved()
                 State.Keybinds[tostring(id)] = key
             end
         end
+
+        local friendSettings = decoded.friendSettings
+        if type(friendSettings) == "table" then
+            State.FriendSettings.AutoAccept = friendSettings.autoAccept == true
+            State.FriendSettings.AutoReject = friendSettings.autoReject == true
+            State.FriendSettings.SyncEmote = friendSettings.syncEmote ~= false
+        end
     end)
 
     rebuildFavoriteSet()
@@ -331,6 +346,11 @@ saveData = function()
                 recent = State.Recent,
                 searchHistory = State.SearchHistory,
                 keybinds = State.Keybinds,
+                friendSettings = {
+                    autoAccept = State.FriendSettings.AutoAccept,
+                    autoReject = State.FriendSettings.AutoReject,
+                    syncEmote = State.FriendSettings.SyncEmote,
+                },
             }))
         end
     end)
@@ -527,6 +547,233 @@ addRecent = function(item)
 end
 
 loadSaved()
+
+--==============================================================
+-- FRIEND FEATURES
+--==============================================================
+-- Client-only limitation:
+-- Roblox does not expose a general client-to-client friend-emote request
+-- transport. These controls therefore use the local server-friend list,
+-- inspect a friend's currently playing animation, and create a shareable
+-- request code instead of inventing a RemoteEvent/Firebase protocol.
+local renderFriends
+
+local function isServerFriend(other)
+    if not other or other == player then return false end
+    local ok,result = pcall(function()
+        return player:IsFriendsWith(other.UserId)
+    end)
+    return ok and result == true
+end
+
+local function getFriendPlayers()
+    local result = {}
+    for _,other in ipairs(Players:GetPlayers()) do
+        if isServerFriend(other) then
+            table.insert(result,other)
+        end
+    end
+    table.sort(result,function(a,b)
+        return tostring(a.DisplayName):lower() < tostring(b.DisplayName):lower()
+    end)
+    return result
+end
+
+local function getFriendCurrentAnimation(other)
+    if not other or not other.Character then return nil end
+    local humanoid = other.Character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return nil end
+
+    local best
+    pcall(function()
+        for _,track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+            local animation = track.Animation
+            local id = animation and numericId(animation.AnimationId)
+            if id and track.IsPlaying then
+                if not best or track.Priority.Value > best.Priority.Value then
+                    best = {
+                        Id = id,
+                        Name = "Friend Emote",
+                        TimePosition = tonumber(track.TimePosition) or 0,
+                        Length = tonumber(track.Length) or 0,
+                        Priority = track.Priority,
+                    }
+                end
+            end
+        end
+    end)
+    return best
+end
+
+local function playFriendSnapshot(other, syncPosition)
+    local snap = getFriendCurrentAnimation(other)
+    if not snap then
+        toast("No playable animation found")
+        return false
+    end
+
+    local ok = playEmote(snap.Id, tostring(other.DisplayName) .. " • Friend Emote")
+    if not ok then return false end
+
+    if syncPosition ~= false then
+        task.defer(function()
+            local track = State.CurrentTrack
+            if track and snap.Length > 0 then
+                pcall(function()
+                    track.TimePosition = math.clamp(snap.TimePosition / snap.Length,0,1) * track.Length
+                end)
+            end
+        end)
+    end
+    addRecent({Id=snap.Id,AssetId=snap.Id,Name=tostring(other.DisplayName) .. " • Friend Emote"})
+    return true
+end
+
+local function copyFriendRequest(other)
+    local snap = getFriendCurrentAnimation(other)
+    if not snap then
+        toast("Friend is not playing an emote")
+        return
+    end
+
+    local requestCode = "SAIKI_EMOTE_REQUEST|" .. tostring(other.UserId) .. "|" .. tostring(snap.Id)
+    if safeSetClipboard(requestCode) then
+        toast("Friend request code copied")
+    else
+        toast("Request code • " .. tostring(snap.Id))
+    end
+end
+
+local function setFriendSetting(key,value)
+    State.FriendSettings[key] = value == true
+    saveData()
+end
+
+local function renderFriends()
+    if not FriendsList then return end
+
+    for _,child in ipairs(FriendsList:GetChildren()) do
+        if child:IsA("Frame") then child:Destroy() end
+    end
+
+    local friends = getFriendPlayers()
+    local count = 0
+
+    for _,other in ipairs(friends) do
+        count += 1
+
+        local row = create("Frame", {
+            Size = UDim2.new(1,-12,0,58),
+            BackgroundColor3 = State.Dark and Color3.fromRGB(31,27,36) or Color3.fromRGB(251,248,253),
+            BorderSizePixel = 0,
+            LayoutOrder = count,
+            ZIndex = 6,
+        }, FriendsList)
+        corner(row,10)
+        stroke(row,Color3.fromRGB(220,205,230),1,0.18)
+
+        local avatar = create("ImageLabel", {
+            Size = UDim2.fromOffset(42,42),
+            Position = UDim2.fromOffset(7,8),
+            BackgroundTransparency = 1,
+            Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(other.UserId) .. "&w=150&h=150",
+            ScaleType = Enum.ScaleType.Fit,
+            ZIndex = 7,
+        }, row)
+        corner(avatar,21)
+
+        local name = create("TextLabel", {
+            Size = UDim2.new(1,-210,0,18),
+            Position = UDim2.fromOffset(57,6),
+            BackgroundTransparency = 1,
+            Text = tostring(other.DisplayName),
+            TextColor3 = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(65,55,75),
+            Font = Enum.Font.GothamBold,
+            TextSize = 9,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            ZIndex = 7,
+        }, row)
+
+        local username = create("TextLabel", {
+            Size = UDim2.new(1,-210,0,15),
+            Position = UDim2.fromOffset(57,24),
+            BackgroundTransparency = 1,
+            Text = "@" .. tostring(other.Name),
+            TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),
+            Font = Enum.Font.Gotham,
+            TextSize = 7,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            ZIndex = 7,
+        }, row)
+
+        local snapshot = getFriendCurrentAnimation(other)
+        local status = create("TextLabel", {
+            Size = UDim2.new(1,-210,0,13),
+            Position = UDim2.fromOffset(57,39),
+            BackgroundTransparency = 1,
+            Text = snapshot and "Playing an animation" or "Not playing an emote",
+            TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),
+            Font = Enum.Font.GothamMedium,
+            TextSize = 6.5,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 7,
+        }, row)
+
+        local play = makeButton(row,"PLAY",UDim2.new(1,-145,0,8),UDim2.fromOffset(43,20))
+        play.TextSize = 6.5
+        play.ZIndex = 8
+        local sync = makeButton(row,"SYNC",UDim2.new(1,-97,0,8),UDim2.fromOffset(43,20))
+        sync.TextSize = 6.5
+        sync.ZIndex = 8
+        local request = makeButton(row,"REQ",UDim2.new(1,-49,0,8),UDim2.fromOffset(43,20))
+        request.TextSize = 6.5
+        request.ZIndex = 8
+
+        play.MouseButton1Click:Connect(function()
+            State.SelectedFriend = other.UserId
+            playFriendSnapshot(other,false)
+        end)
+
+        sync.MouseButton1Click:Connect(function()
+            State.SelectedFriend = other.UserId
+            if State.FriendSettings.SyncEmote then
+                playFriendSnapshot(other,true)
+            else
+                toast("Friend sync is disabled")
+            end
+        end)
+
+        request.MouseButton1Click:Connect(function()
+            State.SelectedFriend = other.UserId
+            copyFriendRequest(other)
+        end)
+    end
+
+    if count == 0 then
+        local empty = FriendsList.Parent:FindFirstChild("FriendsEmpty")
+        if not empty then
+            empty = create("TextLabel", {
+                Name = "FriendsEmpty",
+                Size = UDim2.new(1,-20,0,50),
+                Position = UDim2.new(0,10,0.5,-25),
+                BackgroundTransparency = 1,
+                Text = "No friends are currently in this server.",
+                TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(115,105,125),
+                Font = Enum.Font.GothamBold,
+                TextSize = 11,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Center,
+                ZIndex = 20,
+            }, FriendsList.Parent)
+        end
+        empty.Visible = true
+    else
+        local empty = FriendsList.Parent:FindFirstChild("FriendsEmpty")
+        if empty then empty.Visible = false end
+    end
+end
 
 --==============================================================
 -- GUI
@@ -841,7 +1088,8 @@ end)
 local CatalogTab = makeButton(Main,"CATALOG",UDim2.fromOffset(10,64),UDim2.fromOffset(88,28))
 local FavoritesTab = makeButton(Main,"FAVORITES",UDim2.fromOffset(103,64),UDim2.fromOffset(96,28))
 local RecentTab = makeButton(Main,"RECENT",UDim2.fromOffset(204,64),UDim2.fromOffset(82,28))
-local SettingsTab = makeButton(Main,"SETTINGS",UDim2.fromOffset(291,64),UDim2.fromOffset(102,28))
+local FriendsTab = makeButton(Main,"FRIENDS",UDim2.fromOffset(291,64),UDim2.fromOffset(82,28))
+local SettingsTab = makeButton(Main,"SETTINGS",UDim2.fromOffset(378,64),UDim2.fromOffset(102,28))
 
 --==============================================================
 -- CATALOG TOP CONTROLS
@@ -1127,6 +1375,74 @@ local RecentGrid = create("UIGridLayout", {
     CellSize=UDim2.fromOffset(151,72), CellPadding=UDim2.fromOffset(7,7),
     HorizontalAlignment=Enum.HorizontalAlignment.Center, SortOrder=Enum.SortOrder.LayoutOrder,
 }, RecentList)
+
+--==============================================================
+-- FRIENDS FRAME
+--==============================================================
+local FriendsFrame = create("Frame", {
+    Size = UDim2.new(1,-20,1,-102),
+    Position = UDim2.fromOffset(10,98),
+    BackgroundTransparency = 1,
+    Visible = false,
+    ZIndex = 5,
+}, Main)
+
+local FriendsRefresh = makeButton(FriendsFrame,"REFRESH",UDim2.new(1,-82,0,0),UDim2.fromOffset(82,29))
+FriendsRefresh.TextSize = 8
+
+local FriendsInfo = create("TextLabel", {
+    Size = UDim2.new(1,-92,0,29),
+    Position = UDim2.fromOffset(0,0),
+    BackgroundTransparency = 1,
+    Text = "SERVER FRIENDS • PLAY / SYNC / REQUEST",
+    TextColor3 = Color3.fromRGB(116,108,130),
+    Font = Enum.Font.GothamBold,
+    TextSize = 8,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 6,
+}, FriendsFrame)
+
+local FriendsList = create("ScrollingFrame", {
+    Size = UDim2.new(1,0,1,-70),
+    Position = UDim2.fromOffset(0,35),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BackgroundTransparency = 0.05,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 4,
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    CanvasSize = UDim2.new(),
+    ZIndex = 5,
+}, FriendsFrame)
+corner(FriendsList,11)
+stroke(FriendsList,Color3.fromRGB(220,205,230),1,0.15)
+create("UIPadding", {
+    PaddingTop=UDim.new(0,6),PaddingBottom=UDim.new(0,6),
+    PaddingLeft=UDim.new(0,6),PaddingRight=UDim.new(0,6)
+}, FriendsList)
+create("UIListLayout", {
+    Padding=UDim.new(0,5),SortOrder=Enum.SortOrder.LayoutOrder
+}, FriendsList)
+
+local FriendsSettings = create("Frame", {
+    Size = UDim2.new(1,0,0,29),
+    Position = UDim2.new(0,0,1,-29),
+    BackgroundTransparency = 1,
+    ZIndex = 6,
+}, FriendsFrame)
+
+local AutoAcceptButton = makeButton(FriendsSettings,"AUTO ACCEPT: OFF",UDim2.fromOffset(0,0),UDim2.fromOffset(128,25))
+AutoAcceptButton.TextSize = 6.5
+local AutoRejectButton = makeButton(FriendsSettings,"AUTO REJECT: OFF",UDim2.fromOffset(134,0),UDim2.fromOffset(128,25))
+AutoRejectButton.TextSize = 6.5
+local SyncSettingButton = makeButton(FriendsSettings,"SYNC: ON",UDim2.fromOffset(268,0),UDim2.fromOffset(90,25))
+SyncSettingButton.TextSize = 7
+
+local function refreshFriendSettings()
+    AutoAcceptButton.Text = State.FriendSettings.AutoAccept and "AUTO ACCEPT: ON" or "AUTO ACCEPT: OFF"
+    AutoRejectButton.Text = State.FriendSettings.AutoReject and "AUTO REJECT: ON" or "AUTO REJECT: OFF"
+    SyncSettingButton.Text = State.FriendSettings.SyncEmote and "SYNC: ON" or "SYNC: OFF"
+end
+refreshFriendSettings()
 
 --==============================================================
 -- SETTINGS FRAME
@@ -2271,6 +2587,8 @@ RefreshButton.MouseButton1Click:Connect(function()
         renderFavorites(FavoritesSearch.Text or "")
     elseif State.Tab == "Recent" then
         renderRecent(RecentSearch.Text or "")
+    elseif State.Tab == "Friends" then
+        renderFriends()
     end
 end)
 
@@ -2400,6 +2718,32 @@ PageBox.FocusLost:Connect(function(enter)
     end
 end)
 
+FriendsRefresh.MouseButton1Click:Connect(renderFriends)
+AutoAcceptButton.MouseButton1Click:Connect(function()
+    local value = not State.FriendSettings.AutoAccept
+    setFriendSetting("AutoAccept",value)
+    if value then
+        setFriendSetting("AutoReject",false)
+    end
+    refreshFriendSettings()
+    toast(value and "Auto accept enabled" or "Auto accept disabled")
+end)
+AutoRejectButton.MouseButton1Click:Connect(function()
+    local value = not State.FriendSettings.AutoReject
+    setFriendSetting("AutoReject",value)
+    if value then
+        setFriendSetting("AutoAccept",false)
+    end
+    refreshFriendSettings()
+    toast(value and "Auto reject enabled" or "Auto reject disabled")
+end)
+SyncSettingButton.MouseButton1Click:Connect(function()
+    local value = not State.FriendSettings.SyncEmote
+    setFriendSetting("SyncEmote",value)
+    refreshFriendSettings()
+    toast(value and "Friend sync enabled" or "Friend sync disabled")
+end)
+
 local setTab
 
 setTab = function(tab)
@@ -2408,26 +2752,30 @@ setTab = function(tab)
     CatalogFrame.Visible = tab == "Catalog"
     FavoritesFrame.Visible = tab == "Favorites"
     RecentFrame.Visible = tab == "Recent"
+    FriendsFrame.Visible = tab == "Friends"
     SettingsFrame.Visible = tab == "Settings"
 
     local tabOn = State.Dark and Color3.fromRGB(76,55,82) or Color3.fromRGB(235,220,245)
     local tabOff = State.Dark and Color3.fromRGB(42,37,49) or Color3.fromRGB(255,248,253)
-    for _,entry in ipairs({{CatalogTab,"Catalog"},{FavoritesTab,"Favorites"},{RecentTab,"Recent"},{SettingsTab,"Settings"}}) do
+    for _,entry in ipairs({{CatalogTab,"Catalog"},{FavoritesTab,"Favorites"},{RecentTab,"Recent"},{FriendsTab,"Friends"},{SettingsTab,"Settings"}}) do
         entry[1].BackgroundColor3 = tab == entry[2] and tabOn or tabOff
     end
     local tabText = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(55,47,65)
-    CatalogTab.TextColor3 = tabText; FavoritesTab.TextColor3 = tabText; RecentTab.TextColor3 = tabText; SettingsTab.TextColor3 = tabText
+    CatalogTab.TextColor3 = tabText; FavoritesTab.TextColor3 = tabText; RecentTab.TextColor3 = tabText; FriendsTab.TextColor3 = tabText; SettingsTab.TextColor3 = tabText
 
     if tab == "Favorites" then
         renderFavorites(FavoritesSearch.Text or "")
     elseif tab == "Recent" then
         renderRecent(RecentSearch.Text or "")
+    elseif tab == "Friends" then
+        renderFriends()
     end
 end
 
 CatalogTab.MouseButton1Click:Connect(function() setTab("Catalog") end)
 FavoritesTab.MouseButton1Click:Connect(function() setTab("Favorites") end)
 RecentTab.MouseButton1Click:Connect(function() setTab("Recent") end)
+FriendsTab.MouseButton1Click:Connect(function() setTab("Friends") end)
 SettingsTab.MouseButton1Click:Connect(function() setTab("Settings") end)
 
 ResetButton.MouseButton1Click:Connect(function()
@@ -2694,8 +3042,10 @@ applyTheme = function()
     RecentSearch.BackgroundColor3 = surface
     RecentSearch.TextColor3 = text
     RecentSearch.PlaceholderColor3 = muted
+    FriendsInfo.TextColor3 = muted
+    FriendsList.BackgroundColor3 = listSurface
 
-    for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,SettingsTab,RefreshButton,SortButton,AddIdButton,SearchClear,SearchHistoryClear,FavoritesClear,RecentClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop,PlaybackLoop}) do
+    for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,FriendsTab,SettingsTab,RefreshButton,SortButton,AddIdButton,SearchClear,SearchHistoryClear,FavoritesClear,RecentClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop,PlaybackLoop}) do
         button.BackgroundColor3 = buttonSurface
         button.TextColor3 = text
     end
@@ -2729,7 +3079,16 @@ applyTheme = function()
     themeCards(List)
     themeCards(FavoritesList)
     themeCards(RecentList)
-    for _,container in ipairs({FavoritesFrame,RecentFrame}) do
+    for _,obj in ipairs(FriendsList:GetChildren()) do
+        if obj:IsA("Frame") then
+            obj.BackgroundColor3 = surface
+            for _,child in ipairs(obj:GetChildren()) do
+                if child:IsA("TextLabel") then child.TextColor3 = text end
+                if child:IsA("TextButton") then child.BackgroundColor3 = buttonSurface; child.TextColor3 = text end
+            end
+        end
+    end
+    for _,container in ipairs({FavoritesFrame,RecentFrame,FriendsFrame}) do
         local empty = container:FindFirstChild("CollectionEmpty")
         if empty and empty:IsA("TextLabel") then
             empty.TextColor3 = dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(115,105,125)
