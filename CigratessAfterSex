@@ -1,5 +1,5 @@
 --[[
-    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V20
+    SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V26
     Compact rebuild based on the supplied GazeOld + Saiki Music references.
 
     INCLUDED FROM GAZE:
@@ -14,7 +14,6 @@
     • Pause / Resume playback
     • Compact playback HUD with progress
     • Favorite toggle with immediate/persistent refresh
-    • Trending preset
     • Search history
     • Clear search button
     • Custom Animation ID
@@ -31,7 +30,7 @@
     • Draggable header
     • Resizable window
     • R6-safe behavior
-    • Persistent saved emotes when executor file APIs exist
+    • Persistent favorites/recent data when executor file APIs exist
 
     SAIKI:
     • Smaller compact UI
@@ -362,108 +361,6 @@ local function toggleFavorite(item)
     local id = numericId(item.Id or item.AssetId)
     if not id then return end
     if State.FavoriteSet[id] then
-        removeFavorite(id)
-    else
-        addFavorite(item)
-    end
-end
-
-local function addRecent(item)
-    local normalized = normalizeEmote(item)
-    if not normalized then return end
-    for i = #State.Recent, 1, -1 do
-        if numericId(State.Recent[i].Id or State.Recent[i].AssetId) == normalized.Id then
-            table.remove(State.Recent, i)
-        end
-    end
-    table.insert(State.Recent, 1, normalized)
-    while #State.Recent > MAX_RECENT do
-        table.remove(State.Recent)
-    end
-    saveData()
-end
-
-loadSaved()
-    State.Favorites = {}
-    State.Recent = {}
-    State.SearchHistory = {}
-
-    pcall(function()
-        if type(isfile) ~= "function" or not isfile("SaikiEmotes_GazeSaved.json")
-            or type(readfile) ~= "function" then
-            return
-        end
-
-        local decoded = HttpService:JSONDecode(readfile("SaikiEmotes_GazeSaved.json"))
-        if type(decoded) ~= "table" then return end
-
-        -- Favorites/recent/search history use the existing file so older data is preserved.
-        -- Old v16 plain saved-emote arrays are intentionally ignored because Saved is removed.
-        local storedFavorites = decoded.favorites
-        if type(storedFavorites) ~= "table" then storedFavorites = decoded.Favorites end
-        if type(storedFavorites) ~= "table" then storedFavorites = decoded.favoriteEmotes end
-        if type(storedFavorites) ~= "table" then storedFavorites = {} end
-        for _, item in ipairs(storedFavorites) do
-            local normalized = normalizeEmote(item)
-            if normalized then table.insert(State.Favorites, normalized) end
-        end
-        for _, item in ipairs(decoded.recent or {}) do
-            local normalized = normalizeEmote(item)
-            if normalized then table.insert(State.Recent, normalized) end
-        end
-        for _, item in ipairs(decoded.searchHistory or {}) do
-            local q = tostring(item or "")
-            if q ~= "" then table.insert(State.SearchHistory, q) end
-        end
-    end)
-
-    rebuildFavoriteSet()
-end
-
-saveData = function()
-    rebuildFavoriteSet()
-
-    pcall(function()
-        if type(writefile) == "function" then
-            writefile("SaikiEmotes_GazeSaved.json", HttpService:JSONEncode({
-                favorites = State.Favorites,
-                recent = State.Recent,
-                searchHistory = State.SearchHistory,
-            }))
-        end
-    end)
-end
-
-local function findFavorite(id)
-    id = numericId(id)
-    for i,item in ipairs(State.Favorites) do
-        if numericId(item.Id or item.AssetId) == id then
-            return i,item
-        end
-    end
-end
-
-local function addFavorite(item)
-    local normalized = normalizeEmote(item)
-    if not normalized then return end
-    if findFavorite(normalized.Id) then return end
-    table.insert(State.Favorites, normalized)
-    saveData()
-    toast("Added to Favorites")
-end
-
-local function removeFavorite(id)
-    local index = findFavorite(id)
-    if not index then return end
-    table.remove(State.Favorites, index)
-    saveData()
-    toast("Removed from Favorites")
-end
-
-local function toggleFavorite(item)
-    local id = numericId(item.Id or item.AssetId)
-    if not id then return end
-    if findFavorite(id) then
         removeFavorite(id)
     else
         addFavorite(item)
