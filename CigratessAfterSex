@@ -616,6 +616,7 @@ loadSaved()
 -- Firebase cloud is configured, friends are also stored across sessions and
 -- can send real friend/sync requests through the shared database.
 local renderFriends
+local FriendsList
 
 local function isServerFriend(other)
     if not other or other == player then return false end
@@ -1850,7 +1851,7 @@ local FriendsInfo = create("TextLabel", {
     ZIndex = 6,
 }, FriendsFrame)
 
-local FriendsList = create("ScrollingFrame", {
+FriendsList = create("ScrollingFrame", {
     Size = UDim2.new(1,0,1,-70),
     Position = UDim2.fromOffset(0,35),
     BackgroundColor3 = Color3.fromRGB(255,255,255),
