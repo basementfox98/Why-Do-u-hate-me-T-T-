@@ -380,6 +380,7 @@ local function ToggleFavorite(id)
 end
 
 local ThemeTransitionToken = 0
+local BuildAmbientForTheme -- forward declaration so theme changes can rebuild effects immediately
 
 local function ApplyTheme(name, animated)
     local newTheme = ThemeDefinitions[name] or ThemeDefinitions.Blood
@@ -387,6 +388,13 @@ local function ApplyTheme(name, animated)
     local token = ThemeTransitionToken
 
     SetThemeColors(name)
+
+    -- Rebuild ambient immediately when the theme changes. This guarantees the
+    -- previous theme's particles are destroyed before the new effect starts.
+    if BuildAmbientForTheme then
+        BuildAmbientForTheme()
+    end
+
     local duration = animated and 0.28 or 0
 
     for _, item in ipairs(ThemeObjects) do
@@ -628,7 +636,8 @@ local function BuildMatrix()
     end
 end
 
-local function BuildAmbientForTheme()
+BuildAmbientForTheme = function()
+    -- Hard-clear every previous ambient object first.
     ClearAmbient()
     -- 0/1 Matrix rain exists ONLY in Hacker.
     if CurrentThemeName == "Snow" then
