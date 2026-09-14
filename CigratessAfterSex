@@ -405,10 +405,10 @@ local Search = New("TextBox", {
 
 local GridHolder = New("ScrollingFrame", {
     Position = UDim2.fromOffset(10, 78),
-    Size = UDim2.new(1, -20, 0, 184),
+    Size = UDim2.new(1, -20, 0, 215),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
-    CanvasSize = UDim2.fromOffset(450, 195),
+    CanvasSize = UDim2.fromOffset(450, 222),
     ScrollBarThickness = 3,
     ScrollBarImageColor3 = RED,
     ScrollingDirection = Enum.ScrollingDirection.Y,
@@ -447,16 +447,15 @@ local EmptyText = New("TextLabel", {
 }, GridHolder)
 TextGradient(EmptyText)
 
--- Pagination sits in the small strip immediately above the bottom tabs.
--- It is NOT part of the scrolling grid, so there is no blank blocking area
--- underneath the third row.
+-- Pagination is part of the scrolling content, directly after row 3.
+-- It becomes visible naturally when the user scrolls to the bottom of the list.
 local PageArea = New("Frame", {
-    Position = UDim2.new(0, 10, 0, 263),
-    Size = UDim2.new(1, -20, 0, 27),
+    Position = UDim2.fromOffset(0, 195),
+    Size = UDim2.fromOffset(450, 27),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     ZIndex = 15,
-}, Glass)
+}, GridHolder)
 
 local PrevPage = New("TextButton", {
     Position = UDim2.fromOffset(0, 1),
@@ -958,9 +957,19 @@ local function CreateCard(emote, order)
     end)
 
     -- The cover image itself is the play button.
-    Cover.Activated:Connect(function()
+    -- Use MouseButton1Click explicitly so desktop/executor input is
+    -- guaranteed to reach the cover ImageButton. Activated is retained
+    -- for touch/gamepad input, with a tiny guard against double firing.
+    local lastCoverClick = 0
+    local function PlayFromCover()
+        local now = os.clock()
+        if now - lastCoverClick < 0.08 then return end
+        lastCoverClick = now
         PlayEmote(emote)
-    end)
+    end
+
+    Cover.MouseButton1Click:Connect(PlayFromCover)
+    Cover.Activated:Connect(PlayFromCover)
 end
 
 function RenderFavorites()
@@ -991,6 +1000,7 @@ function RenderFavorites()
 
     GridHolder.CanvasPosition = Vector2.zero
     PageLabel.Text = "FAVORITES"
+    PageArea.Visible = false
     PrevPage.Visible = false
     NextPage.Visible = false
 end
@@ -1090,7 +1100,7 @@ local function RenderCatalogEntries(entries, pageNumber, finished, generation)
     end
 
     GridHolder.CanvasPosition = Vector2.zero
-    GridHolder.CanvasSize = UDim2.fromOffset(450, 195)
+    GridHolder.CanvasSize = UDim2.fromOffset(450, 222)
 
     PageLabel.Text = tostring(pageNumber) .. " / " .. (finished and tostring(pageNumber) or "...")
     PrevPage.Visible = pageNumber > 1
@@ -1201,6 +1211,7 @@ local function SelectTab(tab)
     FavoriteTabStroke.Color = emotesActive and DARK_RED or RED
 
     if tab == "Emotes" then
+        PageArea.Visible = true
         PrevPage.Visible = true
         NextPage.Visible = true
         NewSearch()
