@@ -60,10 +60,14 @@ local BOLD = Enum.Font.GothamBold
 -- SETTINGS / STATE
 --============================================================
 
+local SETTINGS_FILE = "SaikiEmotes_Settings.json"
 local Settings = {
     Speed = 1,
     Looped = true,
     StopOnMovement = false,
+    ShowHUD = true,
+    Notifications = true,
+    CopyEmoteEnabled = false,
 }
 
 local Favorites = {}
@@ -83,6 +87,9 @@ local CurrentEmote = nil
 local CurrentTrack = nil
 local CurrentAnimation = nil
 local TrackConnection = nil
+
+local EnableCopyEmotePrompts
+local DisableCopyEmotePrompts
 
 local SAVE_FILE = "SaikiEmotes_Favorites.json"
 
@@ -607,7 +614,7 @@ local SettingsHeader = New("TextLabel", {
     Size = UDim2.new(1, -4, 0, 22),
     BackgroundTransparency = 1,
     Font = BOLD,
-    Text = "EMOTE SETTINGS",
+    Text = "SAIKI EMOTES SETTINGS",
     TextSize = 11,
     TextXAlignment = Enum.TextXAlignment.Left,
     TextColor3 = WHITE,
@@ -616,9 +623,9 @@ local SettingsHeader = New("TextLabel", {
 }, SettingsScroll)
 TextGradient(SettingsHeader)
 
-local function MakeSettingRow(title, description, order)
+local function MakeSettingRow(title, description, order, height)
     local row = New("Frame", {
-        Size = UDim2.new(1, -4, 0, 44),
+        Size = UDim2.new(1, -4, 0, height or 44),
         BackgroundColor3 = BLACK_2,
         BackgroundTransparency = 0.12,
         BorderSizePixel = 0,
@@ -627,9 +634,10 @@ local function MakeSettingRow(title, description, order)
     }, SettingsScroll)
     Corner(row, 9)
     Stroke(row, Color3.fromRGB(67, 27, 36), 1)
+
     local titleLabel = New("TextLabel", {
         Position = UDim2.fromOffset(10, 5),
-        Size = UDim2.new(1, -92, 0, 15),
+        Size = UDim2.new(1, -112, 0, 15),
         BackgroundTransparency = 1,
         Font = BOLD,
         Text = title,
@@ -639,9 +647,10 @@ local function MakeSettingRow(title, description, order)
         ZIndex = 8,
     }, row)
     TextGradient(titleLabel)
+
     New("TextLabel", {
         Position = UDim2.fromOffset(10, 21),
-        Size = UDim2.new(1, -92, 0, 14),
+        Size = UDim2.new(1, -112, 0, 14),
         BackgroundTransparency = 1,
         Font = FONT,
         Text = description,
@@ -654,7 +663,8 @@ local function MakeSettingRow(title, description, order)
     return row
 end
 
-local function MakeSettingToggle(row, value, callback)
+local function MakeSettingToggle(row, initial, callback)
+    local value = initial == true
     local button = New("TextButton", {
         AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.new(1, -9, 0.5, 0),
@@ -669,25 +679,27 @@ local function MakeSettingToggle(row, value, callback)
         ZIndex = 9,
     }, row)
     Corner(button, 7)
-    Stroke(button, value and BRIGHT_RED or DARK_RED, 1)
+    local stroke = Stroke(button, value and BRIGHT_RED or DARK_RED, 1)
     button.MouseButton1Click:Connect(function()
         value = not value
         button.Text = value and "ON" or "OFF"
         button.BackgroundColor3 = value and RED or GLASS_2
+        stroke.Color = value and BRIGHT_RED or DARK_RED
         callback(value)
     end)
     return button
 end
 
-local SpeedRow = MakeSettingRow("Playback Speed", "Default speed for new emotes.", 2)
+local SpeedRow = MakeSettingRow("Playback Speed", "Default speed for new and currently playing emotes.", 2)
 local SpeedValue = New("TextLabel", {
     AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -9, 0.5, 0),
-    Size = UDim2.fromOffset(50, 24), BackgroundTransparency = 1, Font = BOLD,
+    Size = UDim2.fromOffset(48, 24), BackgroundTransparency = 1, Font = BOLD,
     Text = string.format("%.2fx", Settings.Speed), TextSize = 9, TextColor3 = WHITE, ZIndex = 8,
 }, SpeedRow)
 local SpeedMinus = New("TextButton", {Position=UDim2.new(1,-105,0.5,-12),Size=UDim2.fromOffset(24,24),BackgroundColor3=BLACK,BorderSizePixel=0,AutoButtonColor=false,Font=BOLD,Text="−",TextSize=13,TextColor3=WHITE,ZIndex=9}, SpeedRow)
 local SpeedPlus = New("TextButton", {Position=UDim2.new(1,-76,0.5,-12),Size=UDim2.fromOffset(24,24),BackgroundColor3=BLACK,BorderSizePixel=0,AutoButtonColor=false,Font=BOLD,Text="+",TextSize=13,TextColor3=WHITE,ZIndex=9}, SpeedRow)
 Corner(SpeedMinus, 6); Corner(SpeedPlus, 6)
+
 local function ChangeSettingsSpeed(delta)
     Settings.Speed = math.clamp(math.round((Settings.Speed + delta) * 4) / 4, 0.25, 3)
     SpeedValue.Text = string.format("%.2fx", Settings.Speed)
@@ -698,7 +710,7 @@ end
 SpeedMinus.MouseButton1Click:Connect(function() ChangeSettingsSpeed(-0.25) end)
 SpeedPlus.MouseButton1Click:Connect(function() ChangeSettingsSpeed(0.25) end)
 
-local LoopRow = MakeSettingRow("Loop Emotes", "Keep an emote playing continuously.", 3)
+local LoopRow = MakeSettingRow("Loop Emotes", "Keep the selected emote playing continuously.", 3)
 local LoopSettingToggle = MakeSettingToggle(LoopRow, Settings.Looped, function(v)
     Settings.Looped = v
     Loop.BackgroundColor3 = v and RED or BLACK_2
@@ -706,26 +718,51 @@ local LoopSettingToggle = MakeSettingToggle(LoopRow, Settings.Looped, function(v
     SaveSettings()
 end)
 
-local MoveRow = MakeSettingRow("Stop on Movement", "Stop the emote when your character moves.", 4)
+local MoveRow = MakeSettingRow("Stop on Movement", "Stop the emote automatically when your character moves.", 4)
 local MoveSettingToggle = MakeSettingToggle(MoveRow, Settings.StopOnMovement, function(v)
     Settings.StopOnMovement = v
     SaveSettings()
 end)
 
-local HudRow = MakeSettingRow("Show Playback HUD", "Show the speed, pause, loop and stop controls.", 5)
+local HudRow = MakeSettingRow("Show Playback HUD", "Show the playback controls while an emote is running.", 5)
 local HudSettingToggle = MakeSettingToggle(HudRow, Settings.ShowHUD, function(v)
     Settings.ShowHUD = v
     Hud.Visible = v and CurrentTrack ~= nil
     SaveSettings()
 end)
 
-local NotifyRow = MakeSettingRow("Notifications", "Show a small message when an emote starts.", 6)
+local NotifyRow = MakeSettingRow("Notifications", "Show a Roblox notification whenever an emote starts.", 6)
 local NotifySettingToggle = MakeSettingToggle(NotifyRow, Settings.Notifications, function(v)
     Settings.Notifications = v
     SaveSettings()
 end)
 
-local ResetRow = MakeSettingRow("Reset Settings", "Restore all Saiki Emotes settings to defaults.", 7)
+local CopyRow = MakeSettingRow("Copy Emote", "Create a prompt near other players to copy their current emote.", 7, 48)
+local CopySettingToggle = MakeSettingToggle(CopyRow, Settings.CopyEmoteEnabled, function(v)
+    Settings.CopyEmoteEnabled = v
+    if v then
+        if EnableCopyEmotePrompts then EnableCopyEmotePrompts() end
+    else
+        if DisableCopyEmotePrompts then DisableCopyEmotePrompts() end
+    end
+    SaveSettings()
+end)
+
+local InfoRow = MakeSettingRow("Language", "English only, matching the Saiki Emotes interface.", 8)
+local LanguageValue = New("TextLabel", {
+    AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -9, 0.5, 0),
+    Size = UDim2.fromOffset(62, 24), BackgroundTransparency = 1, Font = BOLD,
+    Text = "ENGLISH", TextSize = 8, TextColor3 = WHITE, ZIndex = 8,
+}, InfoRow)
+
+local ThemeRow = MakeSettingRow("Theme", "Saiki Red glass theme. VEX themes are not copied because Saiki uses its own fixed visual style.", 9, 50)
+local ThemeValue = New("TextLabel", {
+    AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -9, 0.5, 0),
+    Size = UDim2.fromOffset(62, 24), BackgroundTransparency = 1, Font = BOLD,
+    Text = "SAIKI RED", TextSize = 8, TextColor3 = RED, ZIndex = 8,
+}, ThemeRow)
+
+local ResetRow = MakeSettingRow("Reset Settings", "Restore all configurable Saiki Emotes settings to their defaults.", 10)
 local ResetSettingsButton = New("TextButton", {
     AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -9, 0.5, 0),
     Size = UDim2.fromOffset(65, 25), BackgroundColor3 = RED, BorderSizePixel = 0,
@@ -733,10 +770,19 @@ local ResetSettingsButton = New("TextButton", {
 }, ResetRow)
 Corner(ResetSettingsButton, 7)
 ResetSettingsButton.MouseButton1Click:Connect(function()
-    Settings.Speed = 1; Settings.Looped = true; Settings.StopOnMovement = false; Settings.ShowHUD = true; Settings.Notifications = true
+    Settings.Speed = 1
+    Settings.Looped = true
+    Settings.StopOnMovement = false
+    Settings.ShowHUD = true
+    Settings.Notifications = true
+    Settings.CopyEmoteEnabled = false
     SpeedValue.Text = "1.00x"
-    if CurrentTrack then CurrentTrack.Looped = true; pcall(function() CurrentTrack:AdjustSpeed(1) end) end
+    if CurrentTrack then
+        CurrentTrack.Looped = true
+        pcall(function() CurrentTrack:AdjustSpeed(1) end)
+    end
     Loop.BackgroundColor3 = RED
+    if DisableCopyEmotePrompts then DisableCopyEmotePrompts() end
     SaveSettings()
 end)
 
@@ -1025,6 +1071,90 @@ local function PlayEmote(emote)
             end
         end)
     end)
+end
+
+--============================================================
+-- COPY EMOTE (VEX-STYLE SETTING)
+--============================================================
+
+local COPY_PROMPT_TAG = "SaikiCopyEmotePrompt"
+local CopyConnections = {}
+
+local function CopyPromptForCharacter(targetCharacter)
+    if not targetCharacter or targetCharacter == Player.Character then return end
+    local root = targetCharacter:FindFirstChild("HumanoidRootPart")
+    if not root or root:FindFirstChild(COPY_PROMPT_TAG) then return end
+
+    local prompt = Instance.new("ProximityPrompt")
+    prompt.Name = COPY_PROMPT_TAG
+    prompt.ActionText = "Copy Emote"
+    prompt.ObjectText = ""
+    prompt.MaxActivationDistance = 10
+    prompt.HoldDuration = 0
+    prompt.RequiresLineOfSight = false
+    prompt.Parent = root
+
+    prompt.Triggered:Connect(function()
+        local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+        local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+        if not animator then return end
+
+        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+            local anim = track.Animation
+            local id = anim and AssetId(anim.AnimationId)
+            if id then
+                local known = KnownEmotes[id]
+                if known then
+                    PlayEmote(known)
+                else
+                    PlayEmote({id = id, name = "Copied Emote"})
+                end
+                return
+            end
+        end
+    end)
+end
+
+DisableCopyEmotePrompts = function()
+    for _, connection in ipairs(CopyConnections) do
+        pcall(function() connection:Disconnect() end)
+    end
+    CopyConnections = {}
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= Player and p.Character then
+            local root = p.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local prompt = root:FindFirstChild(COPY_PROMPT_TAG)
+                if prompt then prompt:Destroy() end
+            end
+        end
+    end
+end
+
+EnableCopyEmotePrompts = function()
+    DisableCopyEmotePrompts()
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= Player then
+            if p.Character then CopyPromptForCharacter(p.Character) end
+            table.insert(CopyConnections, p.CharacterAdded:Connect(function(character)
+                if Settings.CopyEmoteEnabled then
+                    task.wait(0.25)
+                    CopyPromptForCharacter(character)
+                end
+            end))
+        end
+    end
+
+    table.insert(CopyConnections, Players.PlayerAdded:Connect(function(p)
+        table.insert(CopyConnections, p.CharacterAdded:Connect(function(character)
+            if Settings.CopyEmoteEnabled then
+                task.wait(0.25)
+                CopyPromptForCharacter(character)
+            end
+        end))
+    end))
 end
 
 --============================================================
@@ -1410,25 +1540,47 @@ local function SelectTab(tab)
     CurrentTab = tab
 
     local emotesActive = tab == "Emotes"
-    TabEmotes.BackgroundColor3 = emotesActive and GLASS_2 or BLACK_2
-    TabFavorites.BackgroundColor3 = emotesActive and BLACK_2 or GLASS_2
-    TabEmotes.TextColor3 = emotesActive and WHITE or MUTED
-    TabFavorites.TextColor3 = emotesActive and MUTED or WHITE
-    EmoteTabStroke.Color = emotesActive and RED or DARK_RED
-    FavoriteTabStroke.Color = emotesActive and DARK_RED or RED
+    local favoritesActive = tab == "Favorites"
+    local settingsActive = tab == "Settings"
 
-    if tab == "Emotes" then
+    TabEmotes.BackgroundColor3 = emotesActive and GLASS_2 or BLACK_2
+    TabFavorites.BackgroundColor3 = favoritesActive and GLASS_2 or BLACK_2
+    TabSettings.BackgroundColor3 = settingsActive and GLASS_2 or BLACK_2
+
+    TabEmotes.TextColor3 = emotesActive and WHITE or MUTED
+    TabFavorites.TextColor3 = favoritesActive and WHITE or MUTED
+    TabSettings.TextColor3 = settingsActive and WHITE or MUTED
+
+    EmoteTabStroke.Color = emotesActive and RED or DARK_RED
+    FavoriteTabStroke.Color = favoritesActive and RED or DARK_RED
+    SettingsTabStroke.Color = settingsActive and RED or DARK_RED
+
+    -- Never leave the catalog/search layer sitting over Settings.
+    SearchHolder.Visible = not settingsActive
+    GridHolder.Visible = not settingsActive
+    SettingsScroll.Visible = settingsActive
+
+    if emotesActive then
         PageArea.Visible = true
         PrevPage.Visible = true
         NextPage.Visible = true
         NewSearch()
-    else
+    elseif favoritesActive then
         RenderFavorites()
+    else
+        PageArea.Visible = false
+        PrevPage.Visible = false
+        NextPage.Visible = false
+        EmptyText.Visible = false
+        GridHolder.CanvasPosition = Vector2.zero
     end
 end
 
 TabEmotes.MouseButton1Click:Connect(function()
     SelectTab("Emotes")
+if Settings.CopyEmoteEnabled and EnableCopyEmotePrompts then
+    EnableCopyEmotePrompts()
+end
 end)
 
 TabFavorites.MouseButton1Click:Connect(function()
@@ -1476,18 +1628,23 @@ Minus.MouseButton1Click:Connect(function()
     Settings.Speed = math.max(0.25, Settings.Speed - 0.25)
     if CurrentTrack then pcall(function() CurrentTrack:AdjustSpeed(Settings.Speed) end) end
     HudSpeed.Text = string.format("%.2fx", Settings.Speed)
+    SpeedValue.Text = string.format("%.2fx", Settings.Speed)
+    SaveSettings()
 end)
 
 Plus.MouseButton1Click:Connect(function()
     Settings.Speed = math.min(3, Settings.Speed + 0.25)
     if CurrentTrack then pcall(function() CurrentTrack:AdjustSpeed(Settings.Speed) end) end
     HudSpeed.Text = string.format("%.2fx", Settings.Speed)
+    SpeedValue.Text = string.format("%.2fx", Settings.Speed)
+    SaveSettings()
 end)
 
 Loop.MouseButton1Click:Connect(function()
     Settings.Looped = not Settings.Looped
     Loop.BackgroundColor3 = Settings.Looped and RED or BLACK_2
     if CurrentTrack then CurrentTrack.Looped = Settings.Looped end
+    SaveSettings()
 end)
 
 Pause.MouseButton1Click:Connect(function()
@@ -1624,6 +1781,10 @@ end)
 Player.CharacterAdded:Connect(function()
     task.wait(0.35)
     StopEmote()
+    if Settings.CopyEmoteEnabled and EnableCopyEmotePrompts then
+        task.wait(0.25)
+        EnableCopyEmotePrompts()
+    end
 end)
 
 MainGui.Enabled = true
