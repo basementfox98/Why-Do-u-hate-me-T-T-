@@ -1,50 +1,6 @@
--- SAIKI EMOTES V52 — LOAD-SAFE BASE
--- Reliable staged boot: compile/run the core in its own chunk, report any error, then remove the boot panel.
-local Players = game:GetService("Players")
-local CoreGui = game:GetService("CoreGui")
-local player = Players.LocalPlayer
-if not player then return end
-local parent
-pcall(function() if type(gethui)=="function" then parent=gethui() end end)
-if not parent then parent=player:FindFirstChildOfClass("PlayerGui") end
-if not parent then parent=CoreGui end
-local old=parent:FindFirstChild("SAIKI_EMOTES_BOOT_DIAGNOSTIC")
-if old then old:Destroy() end
-local gui=Instance.new("ScreenGui")
-gui.Name="SAIKI_EMOTES_BOOT_DIAGNOSTIC"
-gui.ResetOnSpawn=false
-gui.DisplayOrder=999999
-gui.Parent=parent
-local frame=Instance.new("Frame")
-frame.Size=UDim2.fromOffset(420,150)
-frame.Position=UDim2.fromScale(0.5,0.5)
-frame.AnchorPoint=Vector2.new(0.5,0.5)
-frame.BackgroundColor3=Color3.fromRGB(30,25,35)
-frame.BorderSizePixel=0
-frame.Parent=gui
-Instance.new("UICorner",frame).CornerRadius=UDim.new(0,14)
-local title=Instance.new("TextLabel")
-title.Size=UDim2.new(1,-20,0,30)
-title.Position=UDim2.fromOffset(10,8)
-title.BackgroundTransparency=1
-title.Text="SAIKI EMOTES • STABLE BOOT"
-title.Font=Enum.Font.GothamBold
-title.TextSize=14
-title.TextColor3=Color3.new(1,1,1)
-title.Parent=frame
-local msg=Instance.new("TextLabel")
-msg.Size=UDim2.new(1,-30,1,-50)
-msg.Position=UDim2.fromOffset(15,42)
-msg.BackgroundTransparency=1
-msg.Text="Starting stable base..."
-msg.Font=Enum.Font.Gotham
-msg.TextSize=11
-msg.TextWrapped=true
-msg.TextColor3=Color3.fromRGB(220,210,225)
-msg.Parent=frame
-local function show(text) msg.Text=tostring(text) end
-task.defer(function()
-    local source = [=[
+-- SAIKI EMOTES V53 — GUI-FIRST BOOT
+-- Built from the confirmed-working V40 core.
+-- Startup intentionally shows the GUI before catalog/network work.
 
 --[[
     SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V34 HISTORY IMPROVEMENTS
@@ -99,7 +55,7 @@ task.defer(function()
 --==============================================================
 -- SERVICES / SAFE BOOT
 --==============================================================
--- V52 LOAD-SAFE BASE: Firebase/cloud networking remains intentionally isolated from the core GUI.
+-- V40 STABLE BASE: Firebase/cloud networking remains intentionally isolated from the core GUI.
 -- The working base must stay independent of external networking during startup.
 
 local Players = game:GetService("Players")
@@ -3171,44 +3127,18 @@ end)
 setEffectsForMain(not State.Hidden)
 
 --==============================================================
--- START
+-- START — GUI FIRST
 --==============================================================
+-- The GUI is enabled before any catalog/network request is started.
+-- This keeps startup independent from optional executor HTTP/catalog APIs.
 Gui.Enabled = true
 setTab("Catalog")
 
--- Do NOT wait for Character before showing the GUI.
--- Catalog loading also happens asynchronously.
-task.spawn(function()
-    task.wait(0.15)
-    loadCatalog("")
-    task.wait(0.5)
-    toast("SAIKI EMOTES • Ready • Search / Theme / Tabs active")
+-- Catalog requests are started only by the existing Search/Refresh controls.
+pcall(function()
+    toast("SAIKI EMOTES • Ready")
 end)
 
-print("[SAIKI EMOTES] Gaze Edition loaded.")
+print("[SAIKI EMOTES] GUI loaded.")
 
 
-]=]
-    local compiler = loadstring or load
-    if type(compiler) ~= "function" then
-        show("BOOT ERROR\nloadstring/load is unavailable in this executor.")
-        warn("[SAIKI EMOTES V40] loadstring/load unavailable")
-        return
-    end
-    local okCompile, chunkOrError = pcall(compiler, source, "SaikiEmotes_V40_Core")
-    if not okCompile or type(chunkOrError) ~= "function" then
-        show("COMPILE ERROR\n"..tostring(chunkOrError))
-        warn("[SAIKI EMOTES V40 COMPILE ERROR]", chunkOrError)
-        return
-    end
-    show("Starting core...")
-    local okRun, runError = xpcall(chunkOrError, function(err)
-        return debug and debug.traceback and debug.traceback(tostring(err),2) or tostring(err)
-    end)
-    if not okRun then
-        show("RUNTIME ERROR\n"..tostring(runError))
-        warn("[SAIKI EMOTES V40 RUNTIME ERROR]", runError)
-        return
-    end
-    if gui and gui.Parent then gui:Destroy() end
-end)
