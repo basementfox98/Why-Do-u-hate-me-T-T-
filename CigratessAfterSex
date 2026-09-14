@@ -1,4 +1,4 @@
--- SAIKI EMOTES V46 — FRIEND REQUEST/SYNC
+-- SAIKI EMOTES V40 — STABLE BASE
 -- Reliable staged boot: compile/run the core in its own chunk, report any error, then remove the boot panel.
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
@@ -164,7 +164,6 @@ local Settings = {
 
 local State = {
     Dark = false,
-    ThemeIndex = 1,
     Hidden = false,
     Anchored = false,
 
@@ -199,84 +198,12 @@ local State = {
     SelectedFriend = nil,
 
     GradientTime = 0,
+    ThemeIndex = 1,
 }
 
 local PAGE_SIZE = 10
 local MAX_RECENT = 20
 local MAX_SEARCH_HISTORY = 8
-
--- Forward declarations used by theme controls created before the tab/theme handlers.
-local applyTheme
-local setTab
-
---==============================================================
--- THEME PRESETS
---==============================================================
-local ThemePresets = {
-    {
-        Name = "Sakura Dream", Dark = false,
-        Main = Color3.fromRGB(248,245,255), Stroke = Color3.fromRGB(220,205,230),
-        Surface = Color3.fromRGB(255,255,255), List = Color3.fromRGB(255,255,255), Button = Color3.fromRGB(255,248,253),
-        Text = Color3.fromRGB(55,47,65), Muted = Color3.fromRGB(116,108,130),
-        TabOn = Color3.fromRGB(235,220,245), TabOff = Color3.fromRGB(255,248,253),
-        Gradient = {Color3.fromRGB(255,226,241),Color3.fromRGB(235,226,255),Color3.fromRGB(213,249,239)},
-    },
-    {
-        Name = "Ocean Pulse", Dark = false,
-        Main = Color3.fromRGB(241,250,255), Stroke = Color3.fromRGB(185,215,230),
-        Surface = Color3.fromRGB(255,255,255), List = Color3.fromRGB(248,253,255), Button = Color3.fromRGB(235,248,255),
-        Text = Color3.fromRGB(35,57,70), Muted = Color3.fromRGB(92,119,132),
-        TabOn = Color3.fromRGB(207,239,250), TabOff = Color3.fromRGB(235,248,255),
-        Gradient = {Color3.fromRGB(207,244,255),Color3.fromRGB(215,226,255),Color3.fromRGB(205,249,240)},
-    },
-    {
-        Name = "Aurora", Dark = true,
-        Main = Color3.fromRGB(18,25,31), Stroke = Color3.fromRGB(75,125,125),
-        Surface = Color3.fromRGB(28,37,42), List = Color3.fromRGB(22,31,36), Button = Color3.fromRGB(38,50,55),
-        Text = Color3.fromRGB(232,247,243), Muted = Color3.fromRGB(158,188,181),
-        TabOn = Color3.fromRGB(45,78,78), TabOff = Color3.fromRGB(38,50,55),
-        Gradient = {Color3.fromRGB(27,78,75),Color3.fromRGB(47,38,86),Color3.fromRGB(20,70,58)},
-    },
-    {
-        Name = "Sunset", Dark = false,
-        Main = Color3.fromRGB(255,247,241), Stroke = Color3.fromRGB(235,200,185),
-        Surface = Color3.fromRGB(255,255,255), List = Color3.fromRGB(255,251,247), Button = Color3.fromRGB(255,242,232),
-        Text = Color3.fromRGB(72,49,43), Muted = Color3.fromRGB(132,102,91),
-        TabOn = Color3.fromRGB(249,220,202), TabOff = Color3.fromRGB(255,242,232),
-        Gradient = {Color3.fromRGB(255,222,198),Color3.fromRGB(255,214,231),Color3.fromRGB(226,222,255)},
-    },
-    {
-        Name = "Midnight", Dark = true,
-        Main = Color3.fromRGB(16,18,29), Stroke = Color3.fromRGB(78,82,125),
-        Surface = Color3.fromRGB(27,29,43), List = Color3.fromRGB(21,23,36), Button = Color3.fromRGB(37,39,57),
-        Text = Color3.fromRGB(237,237,255), Muted = Color3.fromRGB(161,164,194),
-        TabOn = Color3.fromRGB(57,59,91), TabOff = Color3.fromRGB(37,39,57),
-        Gradient = {Color3.fromRGB(34,40,91),Color3.fromRGB(67,35,93),Color3.fromRGB(24,62,88)},
-    },
-    {
-        Name = "Emerald Night", Dark = true,
-        Main = Color3.fromRGB(15,27,24), Stroke = Color3.fromRGB(65,116,94),
-        Surface = Color3.fromRGB(25,40,35), List = Color3.fromRGB(19,33,29), Button = Color3.fromRGB(35,54,47),
-        Text = Color3.fromRGB(232,247,238), Muted = Color3.fromRGB(155,187,169),
-        TabOn = Color3.fromRGB(43,76,62), TabOff = Color3.fromRGB(35,54,47),
-        Gradient = {Color3.fromRGB(18,78,62),Color3.fromRGB(36,49,89),Color3.fromRGB(19,92,68)},
-    },
-    {
-        Name = "Cherry Noir", Dark = true,
-        Main = Color3.fromRGB(29,16,23), Stroke = Color3.fromRGB(132,67,91),
-        Surface = Color3.fromRGB(42,23,32), List = Color3.fromRGB(33,18,26), Button = Color3.fromRGB(58,30,43),
-        Text = Color3.fromRGB(250,235,241), Muted = Color3.fromRGB(194,151,168),
-        TabOn = Color3.fromRGB(87,42,61), TabOff = Color3.fromRGB(58,30,43),
-        Gradient = {Color3.fromRGB(105,30,64),Color3.fromRGB(62,27,76),Color3.fromRGB(116,39,47)},
-    },
-}
-
-local function getTheme()
-    local index = math.clamp(tonumber(State.ThemeIndex) or 1, 1, #ThemePresets)
-    State.ThemeIndex = index
-    State.Dark = ThemePresets[index].Dark == true
-    return ThemePresets[index]
-end
 
 --==============================================================
 -- HELPERS
@@ -448,12 +375,6 @@ local function loadSaved()
             end
         end
 
-        local savedTheme = tonumber(decoded.themeIndex)
-        if savedTheme and savedTheme >= 1 and savedTheme <= #ThemePresets then
-            State.ThemeIndex = math.floor(savedTheme)
-            State.Dark = ThemePresets[State.ThemeIndex].Dark == true
-        end
-
         local friendSettings = decoded.friendSettings
         if type(friendSettings) == "table" then
             State.FriendSettings.AutoAccept = friendSettings.autoAccept == true
@@ -476,7 +397,6 @@ saveData = function()
                 favorites = State.Favorites,
                 recent = State.Recent,
                 searchHistory = State.SearchHistory,
-                themeIndex = State.ThemeIndex,
                 keybinds = State.Keybinds,
                 friendSettings = {
                     autoAccept = State.FriendSettings.AutoAccept,
@@ -681,373 +601,230 @@ end
 loadSaved()
 
 --==============================================================
--- FRIEND FEATURES • SIMPLE FIREBASE REST
+-- FRIEND FEATURES
 --==============================================================
--- Simple, unauthenticated Firebase transport.
--- The GUI never waits for Firebase to start.
--- Public Firebase rules are required for this testing build.
+-- Client-only limitation:
+-- Roblox does not expose a general client-to-client friend-emote request
+-- transport. These controls therefore use the local server-friend list,
+-- inspect a friend's currently playing animation, and create a shareable
+-- request code instead of inventing a RemoteEvent/Firebase protocol.
 local renderFriends
 local FriendsList
-local showFriendRequestPrompt
-local respondToFriendRequest
-local PendingFriendPrompt=nil
 
-local FIREBASE_URL = "https://oikjhgbnjkjhb-default-rtdb.asia-southeast1.firebasedatabase.app"
-FIREBASE_URL = FIREBASE_URL:gsub("/$","")
-local CLOUD_ROOT = FIREBASE_URL .. "/saikiEmotes"
-
-local function firebaseRequest(method,path,body)
-    local requestFn
-    pcall(function() if syn and type(syn.request) == "function" then requestFn = syn.request end end)
-    if not requestFn then pcall(function() if http and type(http.request) == "function" then requestFn = http.request end end) end
-    if not requestFn and type(http_request) == "function" then requestFn = http_request end
-    if not requestFn and type(request) == "function" then requestFn = request end
-    if not requestFn then return false,nil end
-
-    local payload
-    if body ~= nil then
-        local okEncode,encoded = pcall(function() return HttpService:JSONEncode(body) end)
-        if not okEncode then return false,nil end
-        payload = encoded
-    end
-
-    local ok,response = pcall(function()
-        local options={Url=CLOUD_ROOT .. path .. ".json",Method=method,Headers={["Content-Type"]="application/json"}}
-        if payload then options.Body=payload end
-        return requestFn(options)
+local function isServerFriend(other)
+    if not other or other == player then return false end
+    local ok,result = pcall(function()
+        return player:IsFriendsWith(other.UserId)
     end)
-    if not ok or not response then return false,nil end
-    local status=tonumber(response.StatusCode or response.Status or 0) or 0
-    if status ~= 0 and (status < 200 or status >= 300) then return false,nil end
-    local raw=tostring(response.Body or "")
-    if raw=="" or raw=="null" then return true,nil end
-    local okDecode,data=pcall(function() return HttpService:JSONDecode(raw) end)
-    if not okDecode then return true,nil end
-    return true,data
+    return ok and result == true
 end
 
-local function cloudWritePresence(active)
-    local data={
-        userId=player.UserId,
-        username=tostring(player.Name),
-        displayName=tostring(player.DisplayName),
-        activeEmote=active,
-        updated=os.time(),
-    }
-    firebaseRequest("PUT","/presence/"..tostring(player.UserId),data)
-end
-
-local function cloudDeletePresence()
-    firebaseRequest("DELETE","/presence/"..tostring(player.UserId))
-end
-
-local function getCloudPresence()
-    local ok,data=firebaseRequest("GET","/presence")
-    if not ok or type(data)~="table" then return {} end
-    return data
-end
-
-local function makeRequestId(fromId)
-    return tostring(fromId).."_"..tostring(os.time()).."_"..tostring(math.random(1000,9999))
-end
-
-local function getMyActiveEmote()
-    local track=State.CurrentTrack
-    if not track or not track.IsPlaying then return nil end
-    local animation=track.Animation
-    local id=animation and numericId(animation.AnimationId)
-    if not id then return nil end
-    return {
-        id=id,
-        name=State.Selected and tostring(State.Selected.Name or "Emote") or "Emote",
-        timePosition=tonumber(track.TimePosition) or 0,
-        length=tonumber(track.Length) or 0,
-    }
-end
-
-local function sendCloudRequest(targetId,requestType)
-    targetId=numericId(targetId)
-    if not targetId or targetId==player.UserId then return false end
-    local requestId=makeRequestId(player.UserId)
-    local active=getMyActiveEmote()
-    local data={
-        requestId=requestId,
-        type=requestType,
-        fromId=player.UserId,
-        fromName=tostring(player.DisplayName),
-        fromUsername=tostring(player.Name),
-        created=os.time(),
-        emote=active,
-    }
-    local ok=firebaseRequest("PUT","/requests/"..tostring(targetId).."/"..requestId,data)
-    if ok then
-        toast(requestType=="sync" and "Sync request sent" or "Friend request sent")
-    else
-        toast("Could not send request")
-    end
-    return ok
-end
-
-local function cloudSaveFriend(targetId)
-    targetId=numericId(targetId)
-    if not targetId or targetId==player.UserId then return false end
-    local data={userId=targetId,accepted=true,updated=os.time()}
-    local ok=firebaseRequest("PUT","/friends/"..tostring(player.UserId).."/"..tostring(targetId),data)
-    if ok then
-        firebaseRequest("PUT","/friends/"..tostring(targetId).."/"..tostring(player.UserId),{userId=player.UserId,accepted=true,updated=os.time()})
-    end
-    return ok
-end
-
-local function processFriendRequest(requestId,item)
-    if type(item)~="table" then return end
-    local fromId=numericId(item.fromId)
-    if not fromId or fromId==player.UserId then
-        firebaseRequest("DELETE","/requests/"..tostring(player.UserId).."/"..tostring(requestId))
-        return
-    end
-    local requestType=tostring(item.type or "friend")
-    if requestType=="sync" then
-        local emote=type(item.emote)=="table" and item.emote or nil
-        if State.FriendSettings.SyncEmote and emote and numericId(emote.id) then
-            local id=numericId(emote.id)
-            local okPlay=playEmote(id,tostring(emote.name or item.fromName or "Friend Sync"))
-            if okPlay then
-                local track=State.CurrentTrack
-                local sentLength=tonumber(emote.length) or 0
-                local sentPosition=tonumber(emote.timePosition) or 0
-                if track and sentLength>0 then
-                    pcall(function()
-                        track.TimePosition=math.clamp(sentPosition/sentLength,0,1)*track.Length
-                    end)
-                end
-                addRecent({Id=id,AssetId=id,Name=tostring(emote.name or "Friend Sync")})
-                State.SelectedFriend=fromId
-                toast("Sync request accepted")
-            end
+local function getFriendPlayers()
+    local result = {}
+    for _,other in ipairs(Players:GetPlayers()) do
+        if isServerFriend(other) then
+            table.insert(result,other)
         end
-        firebaseRequest("DELETE","/requests/"..tostring(player.UserId).."/"..tostring(requestId))
-        return
     end
-
-    if State.FriendSettings.AutoReject then
-        firebaseRequest("DELETE","/requests/"..tostring(player.UserId).."/"..tostring(requestId))
-        toast("Friend request rejected")
-        return
-    end
-    if State.FriendSettings.AutoAccept then
-        cloudSaveFriend(fromId)
-        firebaseRequest("DELETE","/requests/"..tostring(player.UserId).."/"..tostring(requestId))
-        toast("Friend request accepted")
-        return
-    end
-
-    local request={
-        requestId=tostring(requestId),
-        fromId=fromId,
-        fromName=tostring(item.fromName or item.fromUsername or "Player"),
-        fromUsername=tostring(item.fromUsername or "unknown"),
-        type="friend",
-        emote=item.emote,
-    }
-    if not PendingFriendPrompt then
-        PendingFriendPrompt=request
-        showFriendRequestPrompt(request)
-    end
+    table.sort(result,function(a,b)
+        return tostring(a.DisplayName):lower() < tostring(b.DisplayName):lower()
+    end)
+    return result
 end
 
-local function cloudReadRequests()
-    local ok,data=firebaseRequest("GET","/requests/"..tostring(player.UserId))
-    if not ok or type(data)~="table" then return end
-    for requestId,item in pairs(data) do
-        if type(item)=="table" then
-            if tostring(item.type or "friend")=="sync" and State.FriendSettings.SyncEmote then
-                local emote=type(item.emote)=="table" and item.emote or nil
-                if emote and numericId(emote.id) then
-                    local request={
-                        requestId=tostring(requestId),
-                        fromId=numericId(item.fromId),
-                        fromName=tostring(item.fromName or item.fromUsername or "Player"),
-                        fromUsername=tostring(item.fromUsername or "unknown"),
-                        type="sync",
-                        emote=emote,
+local function getFriendCurrentAnimation(other)
+    if not other or not other.Character then return nil end
+    local humanoid = other.Character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return nil end
+
+    local best
+    pcall(function()
+        for _,track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+            local animation = track.Animation
+            local id = animation and numericId(animation.AnimationId)
+            if id and track.IsPlaying then
+                if not best or track.Priority.Value > best.Priority.Value then
+                    best = {
+                        Id = id,
+                        Name = "Friend Emote",
+                        TimePosition = tonumber(track.TimePosition) or 0,
+                        Length = tonumber(track.Length) or 0,
+                        Priority = track.Priority,
                     }
-                    if State.FriendSettings.AutoAccept then
-                        request.accept=true
-                        respondToFriendRequest(request)
-                    elseif not PendingFriendPrompt or tostring(PendingFriendPrompt.requestId)~=tostring(requestId) then
-                        PendingFriendPrompt=request
-                        showFriendRequestPrompt(request)
-                    end
-                end
-            elseif tostring(item.type or "friend")=="friend" then
-                processFriendRequest(requestId,item)
-            end
-        end
-    end
-end
-
-respondToFriendRequest = function(request)
-    if not request or not request.requestId then return end
-    local path="/requests/"..tostring(player.UserId).."/"..tostring(request.requestId)
-    if request.accept then
-        if request.type=="sync" then
-            local emote=request.emote
-            local id=emote and numericId(emote.id)
-            if id then
-                local okPlay=playEmote(id,tostring(emote.name or "Friend Sync"))
-                if okPlay then
-                    local track=State.CurrentTrack
-                    local sentLength=tonumber(emote.length) or 0
-                    local sentPosition=tonumber(emote.timePosition) or 0
-                    if track and sentLength>0 then
-                        pcall(function()
-                            track.TimePosition=math.clamp(sentPosition/sentLength,0,1)*track.Length
-                        end)
-                    end
-                    addRecent({Id=id,AssetId=id,Name=tostring(emote.name or "Friend Sync")})
-                    State.SelectedFriend=numericId(request.fromId)
-                    toast("Synced with "..tostring(request.fromName))
                 end
             end
-        else
-            cloudSaveFriend(request.fromId)
-            State.SelectedFriend=numericId(request.fromId)
-            toast("Friend request accepted")
         end
-    else
-        toast(request.type=="sync" and "Sync request rejected" or "Friend request rejected")
-    end
-    firebaseRequest("DELETE",path)
-    task.defer(function() if State.Tab=="Friends" then renderFriends() end end)
+    end)
+    return best
 end
 
-local directSyncWithPlayer
+local function playFriendSnapshot(other, syncPosition)
+    local snap = getFriendCurrentAnimation(other)
+    if not snap then
+        toast("No playable animation found")
+        return false
+    end
 
-directSyncWithPlayer = function(other)
-    if not other then return false end
-    local active=other.activeEmote
-    local id=active and numericId(active.id)
-    if not id then
-        toast("Player is not playing an emote")
-        return false
-    end
-    if not State.FriendSettings.SyncEmote then
-        toast("Friend sync is disabled")
-        return false
-    end
-    local ok=playEmote(id,tostring(active.name or other.displayName or "Friend Sync"))
+    local ok = playEmote(snap.Id, tostring(other.DisplayName) .. " • Friend Emote")
     if not ok then return false end
-    local track=State.CurrentTrack
-    local sentLength=tonumber(active.length) or 0
-    local sentPosition=tonumber(active.timePosition) or 0
-    if track and sentLength>0 then
-        pcall(function()
-            track.TimePosition=math.clamp(sentPosition/sentLength,0,1)*track.Length
+
+    if syncPosition ~= false then
+        task.defer(function()
+            local track = State.CurrentTrack
+            if track and snap.Length > 0 then
+                pcall(function()
+                    track.TimePosition = math.clamp(snap.TimePosition / snap.Length,0,1) * track.Length
+                end)
+            end
         end)
     end
-    addRecent({Id=id,AssetId=id,Name=tostring(active.name or other.displayName or "Friend Sync")})
-    State.SelectedFriend=numericId(other.userId)
-    toast("Synced with "..tostring(other.displayName or other.username or "player"))
+    addRecent({Id=snap.Id,AssetId=snap.Id,Name=tostring(other.DisplayName) .. " • Friend Emote"})
     return true
 end
 
-local function publishCurrentEmote()
-    cloudWritePresence(getMyActiveEmote())
+local function copyFriendRequest(other)
+    local snap = getFriendCurrentAnimation(other)
+    if not snap then
+        toast("Friend is not playing an emote")
+        return
+    end
+
+    local requestCode = "SAIKI_EMOTE_REQUEST|" .. tostring(other.UserId) .. "|" .. tostring(snap.Id)
+    if safeSetClipboard(requestCode) then
+        toast("Friend request code copied")
+    else
+        toast("Request code • " .. tostring(snap.Id))
+    end
+end
+
+local function setFriendSetting(key,value)
+    State.FriendSettings[key] = value == true
+    saveData()
 end
 
 local function renderFriends()
     if not FriendsList then return end
+
     for _,child in ipairs(FriendsList:GetChildren()) do
         if child:IsA("Frame") then child:Destroy() end
     end
-    local cloud=getCloudPresence()
-    local rows={}
-    for uid,data in pairs(cloud) do
-        local numericUserId=numericId(uid)
-        if numericUserId and numericUserId~=player.UserId and type(data)=="table" then
-            table.insert(rows,data)
-        end
-    end
-    table.sort(rows,function(a,b)
-        return tostring(a.displayName or a.username or ""):lower()<tostring(b.displayName or b.username or ""):lower()
-    end)
 
-    local count=0
-    for _,other in ipairs(rows) do
-        count+=1
-        local row=create("Frame",{
-            Size=UDim2.new(1,-12,0,58),
-            BackgroundColor3=State.Dark and Color3.fromRGB(31,27,36) or Color3.fromRGB(251,248,253),
-            BorderSizePixel=0,LayoutOrder=count,ZIndex=6,
-        },FriendsList)
-        corner(row,10); stroke(row,Color3.fromRGB(220,205,230),1,0.18)
-        local uid=numericId(other.userId)
-        local avatar=create("ImageLabel",{
-            Size=UDim2.fromOffset(42,42),Position=UDim2.fromOffset(7,8),BackgroundTransparency=1,
-            Image="rbxthumb://type=AvatarHeadShot&id="..tostring(uid or 0).."&w=150&h=150",
-            ScaleType=Enum.ScaleType.Fit,ZIndex=7,
-        },row)
+    local friends = getFriendPlayers()
+    local count = 0
+
+    for _,other in ipairs(friends) do
+        count += 1
+
+        local row = create("Frame", {
+            Size = UDim2.new(1,-12,0,58),
+            BackgroundColor3 = State.Dark and Color3.fromRGB(31,27,36) or Color3.fromRGB(251,248,253),
+            BorderSizePixel = 0,
+            LayoutOrder = count,
+            ZIndex = 6,
+        }, FriendsList)
+        corner(row,10)
+        stroke(row,Color3.fromRGB(220,205,230),1,0.18)
+
+        local avatar = create("ImageLabel", {
+            Size = UDim2.fromOffset(42,42),
+            Position = UDim2.fromOffset(7,8),
+            BackgroundTransparency = 1,
+            Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(other.UserId) .. "&w=150&h=150",
+            ScaleType = Enum.ScaleType.Fit,
+            ZIndex = 7,
+        }, row)
         corner(avatar,21)
-        local name=create("TextLabel",{
-            Size=UDim2.new(1,-232,0,18),Position=UDim2.fromOffset(57,5),BackgroundTransparency=1,
-            Text=tostring(other.displayName or other.username or "Unknown"),
-            TextColor3=State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(65,55,75),
-            Font=Enum.Font.GothamBold,TextSize=9,TextXAlignment=Enum.TextXAlignment.Left,
-            TextTruncate=Enum.TextTruncate.AtEnd,ZIndex=7,
-        },row)
-        local username=create("TextLabel",{
-            Size=UDim2.new(1,-232,0,15),Position=UDim2.fromOffset(57,24),BackgroundTransparency=1,
-            Text="@"..tostring(other.username or "unknown"),
-            TextColor3=State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),
-            Font=Enum.Font.Gotham,TextSize=7,TextXAlignment=Enum.TextXAlignment.Left,
-            TextTruncate=Enum.TextTruncate.AtEnd,ZIndex=7,
-        },row)
-        local active=type(other.activeEmote)=="table" and numericId(other.activeEmote.id)
-        local status=create("TextLabel",{
-            Size=UDim2.new(1,-232,0,13),Position=UDim2.fromOffset(57,39),BackgroundTransparency=1,
-            Text=active and ("Playing • "..tostring(other.activeEmote.name or "Emote")) or "Online • Not playing",
-            TextColor3=State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),
-            Font=Enum.Font.GothamMedium,TextSize=6.5,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=7,
-        },row)
 
-        local play=makeButton(row,"PLAY",UDim2.new(1,-202,0,8),UDim2.fromOffset(46,20)); play.TextSize=6.5; play.ZIndex=8
-        local sync=makeButton(row,"SYNC",UDim2.new(1,-152,0,8),UDim2.fromOffset(46,20)); sync.TextSize=6.5; sync.ZIndex=8
-        local ask=makeButton(row,"ASK SYNC",UDim2.new(1,-102,0,8),UDim2.fromOffset(56,20)); ask.TextSize=6.5; ask.ZIndex=8
-        local req=makeButton(row,"REQ",UDim2.new(1,-46,0,8),UDim2.fromOffset(43,20)); req.TextSize=6.5; req.ZIndex=8
+        local name = create("TextLabel", {
+            Size = UDim2.new(1,-210,0,18),
+            Position = UDim2.fromOffset(57,6),
+            BackgroundTransparency = 1,
+            Text = tostring(other.DisplayName),
+            TextColor3 = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(65,55,75),
+            Font = Enum.Font.GothamBold,
+            TextSize = 9,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            ZIndex = 7,
+        }, row)
+
+        local username = create("TextLabel", {
+            Size = UDim2.new(1,-210,0,15),
+            Position = UDim2.fromOffset(57,24),
+            BackgroundTransparency = 1,
+            Text = "@" .. tostring(other.Name),
+            TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),
+            Font = Enum.Font.Gotham,
+            TextSize = 7,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            ZIndex = 7,
+        }, row)
+
+        local snapshot = getFriendCurrentAnimation(other)
+        local status = create("TextLabel", {
+            Size = UDim2.new(1,-210,0,13),
+            Position = UDim2.fromOffset(57,39),
+            BackgroundTransparency = 1,
+            Text = snapshot and "Playing an animation" or "Not playing an emote",
+            TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),
+            Font = Enum.Font.GothamMedium,
+            TextSize = 6.5,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 7,
+        }, row)
+
+        local play = makeButton(row,"PLAY",UDim2.new(1,-145,0,8),UDim2.fromOffset(43,20))
+        play.TextSize = 6.5
+        play.ZIndex = 8
+        local sync = makeButton(row,"SYNC",UDim2.new(1,-97,0,8),UDim2.fromOffset(43,20))
+        sync.TextSize = 6.5
+        sync.ZIndex = 8
+        local request = makeButton(row,"REQ",UDim2.new(1,-49,0,8),UDim2.fromOffset(43,20))
+        request.TextSize = 6.5
+        request.ZIndex = 8
 
         play.MouseButton1Click:Connect(function()
-            State.SelectedFriend=uid
-            directSyncWithPlayer(other)
+            State.SelectedFriend = other.UserId
+            playFriendSnapshot(other,false)
         end)
+
         sync.MouseButton1Click:Connect(function()
-            State.SelectedFriend=uid
-            directSyncWithPlayer(other)
+            State.SelectedFriend = other.UserId
+            if State.FriendSettings.SyncEmote then
+                playFriendSnapshot(other,true)
+            else
+                toast("Friend sync is disabled")
+            end
         end)
-        ask.MouseButton1Click:Connect(function()
-            State.SelectedFriend=uid
-            if not active then toast("Player is not playing an emote"); return end
-            sendCloudRequest(uid,"sync")
-        end)
-        req.MouseButton1Click:Connect(function()
-            State.SelectedFriend=uid
-            sendCloudRequest(uid,"friend")
+
+        request.MouseButton1Click:Connect(function()
+            State.SelectedFriend = other.UserId
+            copyFriendRequest(other)
         end)
     end
 
-    local empty=FriendsList.Parent:FindFirstChild("FriendsEmpty")
-    if count==0 then
+    if count == 0 then
+        local empty = FriendsList.Parent:FindFirstChild("FriendsEmpty")
         if not empty then
-            empty=create("TextLabel",{
-                Name="FriendsEmpty",Size=UDim2.new(1,-20,0,50),Position=UDim2.new(0,10,0.5,-25),
-                BackgroundTransparency=1,Text="No other Saiki Emotes users are online.",
-                TextColor3=State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(115,105,125),
-                Font=Enum.Font.GothamBold,TextSize=11,TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Center,ZIndex=20,
-            },FriendsList.Parent)
+            empty = create("TextLabel", {
+                Name = "FriendsEmpty",
+                Size = UDim2.new(1,-20,0,50),
+                Position = UDim2.new(0,10,0.5,-25),
+                BackgroundTransparency = 1,
+                Text = "No friends are currently in this server.",
+                TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(115,105,125),
+                Font = Enum.Font.GothamBold,
+                TextSize = 11,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Center,
+                ZIndex = 20,
+            }, FriendsList.Parent)
         end
-        empty.Visible=true
-    elseif empty then
-        empty.Visible=false
+        empty.Visible = true
+    else
+        local empty = FriendsList.Parent:FindFirstChild("FriendsEmpty")
+        if empty then empty.Visible = false end
     end
 end
 
@@ -1083,6 +860,22 @@ local Gradient = create("UIGradient", {
         ColorSequenceKeypoint.new(1, Color3.fromRGB(218,248,238)),
     }),
 }, Main)
+
+-- V48: lightweight built-in themes. No extra network calls or polling.
+local Themes = {
+    {Name="Sakura Dream",Dark=false,Colors={Color3.fromRGB(255,220,238),Color3.fromRGB(232,220,255),Color3.fromRGB(218,248,238)}},
+    {Name="Ocean Pulse",Dark=false,Colors={Color3.fromRGB(205,245,255),Color3.fromRGB(215,225,255),Color3.fromRGB(205,255,238)}},
+    {Name="Sunset Glow",Dark=false,Colors={Color3.fromRGB(255,225,205),Color3.fromRGB(255,210,235),Color3.fromRGB(230,215,255)}},
+    {Name="Aurora",Dark=true,Colors={Color3.fromRGB(40,70,75),Color3.fromRGB(65,50,95),Color3.fromRGB(35,85,75)}},
+    {Name="Midnight",Dark=true,Colors={Color3.fromRGB(30,40,75),Color3.fromRGB(55,35,90),Color3.fromRGB(35,65,100)}},
+    {Name="Cherry Noir",Dark=true,Colors={Color3.fromRGB(80,28,48),Color3.fromRGB(55,28,65),Color3.fromRGB(95,35,45)}},
+}
+
+local function getTheme()
+    local theme = Themes[State.ThemeIndex] or Themes[1]
+    State.Dark = theme.Dark
+    return theme
+end
 
 local Scale = create("UIScale", {}, Main)
 
@@ -1670,7 +1463,7 @@ local FriendsInfo = create("TextLabel", {
     Size = UDim2.new(1,-92,0,29),
     Position = UDim2.fromOffset(0,0),
     BackgroundTransparency = 1,
-    Text = "PLAY = COPY  •  SYNC = DIRECT  •  ASK SYNC = REQUEST",
+    Text = "SERVER FRIENDS • PLAY / SYNC / REQUEST",
     TextColor3 = Color3.fromRGB(116,108,130),
     Font = Enum.Font.GothamBold,
     TextSize = 8,
@@ -1719,52 +1512,6 @@ local function refreshFriendSettings()
     SyncSettingButton.Text = State.FriendSettings.SyncEmote and "SYNC: ON" or "SYNC: OFF"
 end
 refreshFriendSettings()
-
--- One reusable notification popup for incoming friend/sync requests.
-local FriendPrompt = create("Frame", {
-    Name="FriendPrompt", Size=UDim2.fromOffset(330,132), Position=UDim2.new(0.5,-165,0.5,-66),
-    BackgroundColor3=Color3.fromRGB(255,248,253), BorderSizePixel=0, Visible=false, ZIndex=100,
-}, Main)
-corner(FriendPrompt,14); stroke(FriendPrompt,Color3.fromRGB(220,195,230),1,0.08)
-local FriendPromptTitle=create("TextLabel",{
-    Size=UDim2.new(1,-24,0,22),Position=UDim2.fromOffset(12,10),BackgroundTransparency=1,
-    Text="EMOTE REQUEST",Font=Enum.Font.GothamBold,TextSize=11,
-    TextColor3=Color3.fromRGB(65,55,75),TextXAlignment=Enum.TextXAlignment.Left,ZIndex=101,
-},FriendPrompt)
-local FriendPromptText=create("TextLabel",{
-    Size=UDim2.new(1,-24,0,48),Position=UDim2.fromOffset(12,35),BackgroundTransparency=1,
-    Text="",Font=Enum.Font.Gotham,TextSize=8,TextWrapped=true,
-    TextColor3=Color3.fromRGB(105,95,115),TextXAlignment=Enum.TextXAlignment.Left,ZIndex=101,
-},FriendPrompt)
-local FriendPromptAccept=makeButton(FriendPrompt,"ACCEPT",UDim2.new(1,-158,1,-36),UDim2.fromOffset(68,25)); FriendPromptAccept.ZIndex=102; FriendPromptAccept.TextSize=7
-local FriendPromptReject=makeButton(FriendPrompt,"REJECT",UDim2.new(1,-82,1,-36),UDim2.fromOffset(68,25)); FriendPromptReject.ZIndex=102; FriendPromptReject.TextSize=7
-local FriendPromptData=nil
-showFriendRequestPrompt=function(data)
-    if not data then return end
-    FriendPromptData=data
-    FriendPromptTitle.Text=data.type=="sync" and "SYNC REQUEST" or "FRIEND REQUEST"
-    if data.type=="sync" then
-        FriendPromptText.Text=tostring(data.fromName or "Player").." wants to sync their emote with you.\nAccept to play their current emote, or reject the request."
-    else
-        FriendPromptText.Text=tostring(data.fromName or "Player").." wants to add you as a friend on Saiki Emotes.\nAccept or reject this request."
-    end
-    FriendPrompt.Visible=true
-    FriendPrompt.ZIndex=100
-end
-FriendPromptAccept.MouseButton1Click:Connect(function()
-    local data=FriendPromptData
-    FriendPromptData=nil
-    FriendPrompt.Visible=false
-    if data and PendingFriendPrompt and tostring(PendingFriendPrompt.requestId)==tostring(data.requestId) then PendingFriendPrompt=nil end
-    if data then data.accept=true; respondToFriendRequest(data) end
-end)
-FriendPromptReject.MouseButton1Click:Connect(function()
-    local data=FriendPromptData
-    FriendPromptData=nil
-    FriendPrompt.Visible=false
-    if data and PendingFriendPrompt and tostring(PendingFriendPrompt.requestId)==tostring(data.requestId) then PendingFriendPrompt=nil end
-    if data then data.accept=false; respondToFriendRequest(data) end
-end)
 
 --==============================================================
 -- SETTINGS FRAME
@@ -1954,50 +1701,6 @@ addSettingToggle("Looped","Looped")
 addSettingToggle("Stop Other Animations On Play","StopOtherAnimations")
 addSettingToggle("High Priority","HighPriority")
 addSettingToggle("Freeze On Finish","FreezeOnFinish")
-
-local ThemeRow = create("Frame", {
-    Size = UDim2.new(1,-6,0,42),
-    BackgroundColor3 = Color3.fromRGB(255,255,255),
-    BorderSizePixel = 0,
-    LayoutOrder = 14,
-}, SettingsFrame)
-corner(ThemeRow,9)
-stroke(ThemeRow,Color3.fromRGB(220,205,230),1,0.18)
-
-local ThemeLabel = create("TextLabel", {
-    Size = UDim2.new(1,-150,1,0),
-    Position = UDim2.fromOffset(10,0),
-    BackgroundTransparency = 1,
-    Text = "Theme",
-    TextColor3 = Color3.fromRGB(65,55,75),
-    Font = Enum.Font.GothamMedium,
-    TextSize = 11,
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, ThemeRow)
-
-local ThemeCycleButton = makeButton(ThemeRow,"Sakura Dream",UDim2.new(1,-132,0.5,-13),UDim2.fromOffset(122,26))
-ThemeCycleButton.TextSize = 8
-
-local function refreshThemeControls()
-    local theme = getTheme()
-    ThemeCycleButton.Text = theme.Name
-    ThemeButton.Text = theme.Dark and "☀" or "🌙"
-end
-
-local function cycleTheme(step)
-    local count = #ThemePresets
-    State.ThemeIndex = ((State.ThemeIndex - 1 + step) % count) + 1
-    State.Dark = ThemePresets[State.ThemeIndex].Dark == true
-    saveData()
-    refreshThemeControls()
-    if applyTheme then applyTheme() end
-    setTab(State.Tab)
-    toast("Theme • " .. ThemePresets[State.ThemeIndex].Name)
-end
-
-ThemeCycleButton.MouseButton1Click:Connect(function()
-    cycleTheme(1)
-end)
 
 local KeybindInfo = create("TextLabel", {
     Size = UDim2.new(1,-6,0,42),
@@ -3110,6 +2813,8 @@ SyncSettingButton.MouseButton1Click:Connect(function()
     toast(value and "Friend sync enabled" or "Friend sync disabled")
 end)
 
+local setTab
+
 setTab = function(tab)
     State.Tab = tab
 
@@ -3143,9 +2848,6 @@ FriendsTab.MouseButton1Click:Connect(function() setTab("Friends") end)
 SettingsTab.MouseButton1Click:Connect(function() setTab("Settings") end)
 
 ResetButton.MouseButton1Click:Connect(function()
-    State.ThemeIndex = 1
-    State.Dark = false
-    if refreshThemeControls then refreshThemeControls() end
     Settings.Speed = 1
     Settings.TimePosition = 0
     Settings.Weight = 1
@@ -3169,8 +2871,15 @@ AnchorButton.MouseButton1Click:Connect(function()
     AnchorButton.Text = State.Anchored and "🔒" or "🔓"
 end)
 
+local applyTheme
+
 ThemeButton.MouseButton1Click:Connect(function()
-    cycleTheme(1)
+    State.ThemeIndex = (State.ThemeIndex % #Themes) + 1
+    local theme = getTheme()
+    ThemeButton.Text = theme.Dark and "☀" or "🌙"
+    if applyTheme then applyTheme() end
+    setTab(State.Tab)
+    toast("Theme: " .. theme.Name)
 end)
 
 --==============================================================
@@ -3371,18 +3080,19 @@ end)
 --==============================================================
 applyTheme = function()
     local theme = getTheme()
-    local surface = theme.Surface
-    local listSurface = theme.List
-    local buttonSurface = theme.Button
-    local text = theme.Text
-    local muted = theme.Muted
+    local dark = theme.Dark
+    local surface = dark and Color3.fromRGB(31,27,36) or Color3.fromRGB(255,255,255)
+    local listSurface = dark and Color3.fromRGB(27,24,31) or Color3.fromRGB(255,255,255)
+    local buttonSurface = dark and Color3.fromRGB(42,37,49) or Color3.fromRGB(255,248,253)
+    local text = dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(55,47,65)
+    local muted = dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(116,108,130)
 
-    Main.BackgroundColor3 = theme.Main
-    MainStroke.Color = theme.Stroke
-    Title.TextColor3 = text
+    Main.BackgroundColor3 = dark and Color3.fromRGB(20,17,24) or Color3.fromRGB(248,245,255)
+    MainStroke.Color = dark and Color3.fromRGB(160,104,132) or Color3.fromRGB(220,205,230)
+    Title.TextColor3 = dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(53,49,67)
     Subtitle.TextColor3 = muted
     Search.BackgroundColor3 = surface
-    Search.BackgroundTransparency = theme.Dark and 0.02 or 0
+    Search.BackgroundTransparency = dark and 0.02 or 0
     Search.TextColor3 = text
     Search.PlaceholderColor3 = muted
     List.BackgroundColor3 = listSurface
@@ -3390,10 +3100,10 @@ applyTheme = function()
     PlaybackName.TextColor3 = text
     PlaybackTime.TextColor3 = muted
     CatalogStatus.TextColor3 = muted
-    PlaybackProgress.BackgroundColor3 = theme.Dark and Color3.fromRGB(62,55,68) or Color3.fromRGB(232,224,238)
+    PlaybackProgress.BackgroundColor3 = dark and Color3.fromRGB(62,55,68) or Color3.fromRGB(232,224,238)
     PageBox.BackgroundColor3 = surface
     PageBox.TextColor3 = text
-    SearchIcon.Image = theme.Dark and SEARCH_WHITE or SEARCH_BLACK
+    SearchIcon.Image = dark and SEARCH_WHITE or SEARCH_BLACK
     SearchHistoryFrame.BackgroundColor3 = surface
     SearchHistoryTitle.TextColor3 = muted
     FavoritesSearch.BackgroundColor3 = surface
@@ -3404,18 +3114,10 @@ applyTheme = function()
     RecentSearch.PlaceholderColor3 = muted
     FriendsInfo.TextColor3 = muted
     FriendsList.BackgroundColor3 = listSurface
-    ThemeRow.BackgroundColor3 = surface
-    ThemeLabel.TextColor3 = text
-    ThemeCycleButton.BackgroundColor3 = buttonSurface
-    ThemeCycleButton.TextColor3 = text
 
     for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,FriendsTab,SettingsTab,RefreshButton,SortButton,AddIdButton,SearchClear,SearchHistoryClear,FavoritesClear,RecentClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop,PlaybackLoop}) do
         button.BackgroundColor3 = buttonSurface
         button.TextColor3 = text
-    end
-
-    for _,entry in ipairs({{CatalogTab,"Catalog"},{FavoritesTab,"Favorites"},{RecentTab,"Recent"},{FriendsTab,"Friends"},{SettingsTab,"Settings"}}) do
-        entry[1].BackgroundColor3 = State.Tab == entry[2] and theme.TabOn or theme.TabOff
     end
 
     for _,row in ipairs(SettingsFrame:GetChildren()) do
@@ -3459,22 +3161,17 @@ applyTheme = function()
     for _,container in ipairs({FavoritesFrame,RecentFrame,FriendsFrame}) do
         local empty = container:FindFirstChild("CollectionEmpty")
         if empty and empty:IsA("TextLabel") then
-            empty.TextColor3 = muted
+            empty.TextColor3 = dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(115,105,125)
         end
     end
 end
 
-refreshThemeControls()
 applyTheme()
 
 RunService.RenderStepped:Connect(function(dt)
     State.GradientTime += dt
-    local theme = getTheme()
-    local phase = State.GradientTime * 0.7
-    local x = math.sin(phase) * 0.48
-    local y = math.cos(phase * 0.63) * 0.18
-    Gradient.Offset = Vector2.new(x,y)
-    local colors = theme.Gradient
+    Gradient.Offset = Vector2.new(math.sin(State.GradientTime * 0.7) * 0.48, math.cos(State.GradientTime * 0.45) * 0.12)
+    local colors = getTheme().Colors
     Gradient.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0,colors[1]),
         ColorSequenceKeypoint.new(0.5,colors[2]),
@@ -3499,18 +3196,6 @@ task.spawn(function()
     toast("SAIKI EMOTES • Ready • Search / Theme / Tabs active")
 end)
 
--- Simple cloud presence/request loop. It never blocks GUI startup.
-task.spawn(function()
-    task.wait(1)
-    while Gui and Gui.Parent do
-        pcall(publishCurrentEmote)
-        pcall(cloudReadRequests)
-        if State.Tab == "Friends" then pcall(renderFriends) end
-        task.wait(3)
-    end
-    pcall(cloudDeletePresence)
-end)
-
 print("[SAIKI EMOTES] Gaze Edition loaded.")
 
 
@@ -3521,10 +3206,10 @@ print("[SAIKI EMOTES] Gaze Edition loaded.")
         warn("[SAIKI EMOTES V40] loadstring/load unavailable")
         return
     end
-    local okCompile, chunkOrError = pcall(compiler, source, "SaikiEmotes_V46_Core")
+    local okCompile, chunkOrError = pcall(compiler, source, "SaikiEmotes_V40_Core")
     if not okCompile or type(chunkOrError) ~= "function" then
         show("COMPILE ERROR\n"..tostring(chunkOrError))
-        warn("[SAIKI EMOTES V46 COMPILE ERROR]", chunkOrError)
+        warn("[SAIKI EMOTES V40 COMPILE ERROR]", chunkOrError)
         return
     end
     show("Starting core...")
@@ -3533,7 +3218,7 @@ print("[SAIKI EMOTES] Gaze Edition loaded.")
     end)
     if not okRun then
         show("RUNTIME ERROR\n"..tostring(runError))
-        warn("[SAIKI EMOTES V46 RUNTIME ERROR]", runError)
+        warn("[SAIKI EMOTES V40 RUNTIME ERROR]", runError)
         return
     end
     if gui and gui.Parent then gui:Destroy() end
