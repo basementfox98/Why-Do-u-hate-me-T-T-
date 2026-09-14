@@ -408,7 +408,7 @@ local GridHolder = New("ScrollingFrame", {
     Size = UDim2.new(1, -20, 0, 184),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
-    CanvasSize = UDim2.fromOffset(450, 222),
+    CanvasSize = UDim2.fromOffset(450, 195),
     ScrollBarThickness = 3,
     ScrollBarImageColor3 = RED,
     ScrollingDirection = Enum.ScrollingDirection.Y,
@@ -447,14 +447,16 @@ local EmptyText = New("TextLabel", {
 }, GridHolder)
 TextGradient(EmptyText)
 
--- Pagination is part of the scrollable content, directly below row 3.
+-- Pagination sits in the small strip immediately above the bottom tabs.
+-- It is NOT part of the scrolling grid, so there is no blank blocking area
+-- underneath the third row.
 local PageArea = New("Frame", {
-    Position = UDim2.fromOffset(0, 195),
-    Size = UDim2.fromOffset(450, 27),
+    Position = UDim2.new(0, 10, 0, 263),
+    Size = UDim2.new(1, -20, 0, 27),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     ZIndex = 15,
-}, GridHolder)
+}, Glass)
 
 local PrevPage = New("TextButton", {
     Position = UDim2.fromOffset(0, 1),
@@ -704,58 +706,118 @@ local function StopEmote()
     Pause.Text = "II"
 end
 
+local AnimationCache = {}
+
+local function ResolveEmoteAnimation(assetId)
+    local key = tostring(assetId)
+    if AnimationCache[key] then
+        return AnimationCache[key]
+    end
+
+    -- Catalog emote IDs are not always directly usable as AnimationIds.
+    -- Resolve the catalog asset first, then use the Animation object it contains.
+    local ok, objects = pcall(function()
+        return game:GetObjects("rbxassetid://" .. key)
+    end)
+
+    if ok and objects and #objects > 0 then
+        local found
+
+        local function scan(instance)
+            if found then return end
+
+            if instance:IsA("Animation") then
+                found = instance
+                return
+            end
+
+            for _, child in ipairs(instance:GetChildren()) do
+                scan(child)
+                if found then return end
+            end
+        end
+
+        for _, object in ipairs(objects) do
+            scan(object)
+            if found then break end
+        end
+
+        if found then
+            AnimationCache[key] = found
+            return found
+        end
+    end
+
+    -- Fallback for assets that can be loaded directly as animations.
+    local fallback = Instance.new("Animation")
+    fallback.Name = "SaikiEmote_" .. key
+    fallback.AnimationId = "rbxassetid://" .. key
+    AnimationCache[key] = fallback
+    return fallback
+end
+
 local function PlayEmote(emote)
-    local animator = GetAnimator()
-    if not animator or not emote or not emote.id then return end
+    if not emote or not emote.id then return end
 
-    StopEmote()
+    task.spawn(function()
+        local animator = GetAnimator()
+        if not animator then return end
 
-    local animation = Instance.new("Animation")
-    animation.AnimationId = "rbxassetid://" .. tostring(emote.id)
-    CurrentAnimation = animation
-
-    local ok, track = pcall(function()
-        return animator:LoadAnimation(animation)
-    end)
-
-    if not ok or not track then
         StopEmote()
-        return
-    end
 
-    CurrentEmote = emote
-    CurrentTrack = track
-    track.Priority = Enum.AnimationPriority.Action4
-    track.Looped = Settings.Looped
+        local resolvedAnimation = ResolveEmoteAnimation(emote.id)
+        if not resolvedAnimation then return end
 
-    local played = pcall(function()
-        track:Play(0.1, 1, Settings.Speed)
-    end)
+        -- Never use the cached Animation instance directly because StopEmote()
+        -- destroys CurrentAnimation. Clone it so the cached catalog animation
+        -- remains available for the next click.
+        local animation = resolvedAnimation:Clone()
+        animation.Name = "SaikiPlayingEmote"
+        CurrentAnimation = animation
 
-    if not played then
-        StopEmote()
-        return
-    end
+        local ok, track = pcall(function()
+            return animator:LoadAnimation(animation)
+        end)
 
-    HudName.Text = emote.name
-    HudSpeed.Text = string.format("%.2fx", Settings.Speed)
-    Hud.Visible = true
-
-    TrackConnection = RunService.Heartbeat:Connect(function()
-        if not CurrentTrack or CurrentTrack ~= track then return end
-
-        if not track.IsPlaying then
+        if not ok or not track then
             StopEmote()
             return
         end
 
-        if Settings.StopOnMovement then
-            local _, humanoid = GetAnimator()
-            if humanoid and humanoid.MoveDirection.Magnitude > 0.05 then
+        CurrentEmote = emote
+        CurrentTrack = track
+        track.Priority = Enum.AnimationPriority.Action4
+        track.Looped = Settings.Looped
+
+        local played = pcall(function()
+            track:Play(0.1, 1, Settings.Speed)
+        end)
+
+        if not played then
+            StopEmote()
+            return
+        end
+
+        HudName.Text = emote.name
+        HudSpeed.Text = string.format("%.2fx", Settings.Speed)
+        Hud.Visible = true
+
+        TrackConnection = RunService.Heartbeat:Connect(function()
+            if not CurrentTrack or CurrentTrack ~= track then return end
+
+            if not track.IsPlaying then
                 StopEmote()
                 return
             end
-        end
+
+            if Settings.StopOnMovement then
+                local _, humanoid = GetAnimator()
+                if humanoid and humanoid.MoveDirection.Magnitude > 0.05 then
+                    StopEmote()
+                    return
+                end
+            end
+        end)
     end)
 end
 
@@ -895,7 +957,8 @@ local function CreateCard(emote, order)
         Favorite.TextColor3 = active and RED or STAR_OFF
     end)
 
-    Cover.MouseButton1Click:Connect(function()
+    -- The cover image itself is the play button.
+    Cover.Activated:Connect(function()
         PlayEmote(emote)
     end)
 end
@@ -1027,7 +1090,7 @@ local function RenderCatalogEntries(entries, pageNumber, finished, generation)
     end
 
     GridHolder.CanvasPosition = Vector2.zero
-    GridHolder.CanvasSize = UDim2.fromOffset(450, 222)
+    GridHolder.CanvasSize = UDim2.fromOffset(450, 195)
 
     PageLabel.Text = tostring(pageNumber) .. " / " .. (finished and tostring(pageNumber) or "...")
     PrevPage.Visible = pageNumber > 1
