@@ -2211,7 +2211,9 @@ local function SelectTab(tab)
     TabFavorites.BackgroundColor3 = favoritesActive and GLASS_2 or BLACK_2
     TabSettings.BackgroundColor3 = settingsActive and GLASS_2 or BLACK_2
 
-    local tabTextInactive = ThemeDefinitions[CurrentThemeName].SOFT
+    -- Keep unselected tab labels clearly readable against the dark glass.
+    -- Use the theme's white instead of the softer muted color.
+    local tabTextInactive = ThemeDefinitions[CurrentThemeName].WHITE
     TabEmotes.TextColor3 = emotesActive and WHITE or tabTextInactive
     TabFavorites.TextColor3 = favoritesActive and WHITE or tabTextInactive
     TabSettings.TextColor3 = settingsActive and WHITE or tabTextInactive
