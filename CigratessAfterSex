@@ -187,6 +187,7 @@ local ThemeObjects = {}
 local ThemeStrokes = {}
 local ThemeTextGradients = {}
 local ThemeBorderGradients = {}
+local BuildAmbientForTheme
 
 local function SameColor(a, b)
     return a and b and a.R == b.R and a.G == b.G and a.B == b.B
@@ -467,6 +468,8 @@ local function ApplyTheme(name, animated)
             end
         end
     end
+
+    if BuildAmbientForTheme then BuildAmbientForTheme() end
 end
 
 -- Subtle animated gradient for Aurora. One lightweight loop drives the registered gradients.
@@ -502,6 +505,166 @@ local MainGui = New("ScreenGui", {
     IgnoreGuiInset = true,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 }, PlayerGui)
+
+--============================================================
+-- THEME AMBIENT EFFECTS
+-- Based on the original Saiki Music visual treatment:
+-- Snow = dense drifting flakes, Lovely = falling cherry blossoms,
+-- Hacker = fast 0/1 Matrix rain. The layer is inside MainGui, so
+-- hiding MainGui also hides the effect automatically.
+--============================================================
+local AmbientLayer = New("Frame", {
+    Name = "SaikiAmbientLayer",
+    Size = UDim2.fromScale(1, 1),
+    Position = UDim2.fromScale(0, 0),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    Active = false,
+    ZIndex = 1,
+}, MainGui)
+
+local AmbientObjects = {}
+local AmbientRandom = Random.new()
+local AmbientTime = 0
+
+local SNOW_FLAKES = {
+    "rbxthumb://type=Asset&id=103375221051022&w=420&h=420",
+    "rbxthumb://type=Asset&id=138994720&w=420&h=420",
+}
+local CHERRY_LEAVES = {
+    "rbxthumb://type=Asset&id=138495845541885&w=420&h=420",
+    "rbxthumb://type=Asset&id=98467848507036&w=420&h=420",
+    "rbxthumb://type=Asset&id=125300690495092&w=420&h=420",
+}
+
+local function ClearAmbient()
+    for _, obj in ipairs(AmbientObjects) do
+        if obj and obj.Parent then obj:Destroy() end
+    end
+    table.clear(AmbientObjects)
+end
+
+local function AddFallingParticle(image, name, sizeMin, sizeMax, speedMin, speedMax, swayMin, swayMax, rotMin, rotMax, transparencyMin, transparencyMax)
+    local obj = New("ImageLabel", {
+        Name = name,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Size = UDim2.fromOffset(AmbientRandom:NextInteger(sizeMin, sizeMax), AmbientRandom:NextInteger(sizeMin, sizeMax)),
+        Position = UDim2.new(AmbientRandom:NextNumber(-0.05, 1.05), 0, AmbientRandom:NextNumber(-0.20, 1.05), 0),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Image = image,
+        ImageTransparency = AmbientRandom:NextNumber(transparencyMin, transparencyMax),
+        Rotation = AmbientRandom:NextNumber(0, 360),
+        ZIndex = 1,
+    }, AmbientLayer)
+    obj:SetAttribute("X", obj.Position.X.Scale)
+    obj:SetAttribute("Y", obj.Position.Y.Scale)
+    obj:SetAttribute("Speed", AmbientRandom:NextNumber(speedMin, speedMax))
+    obj:SetAttribute("Sway", AmbientRandom:NextNumber(swayMin, swayMax))
+    obj:SetAttribute("SwaySpeed", AmbientRandom:NextNumber(0.8, 1.8))
+    obj:SetAttribute("Phase", AmbientRandom:NextNumber(0, math.pi * 2))
+    obj:SetAttribute("RotSpeed", AmbientRandom:NextNumber(rotMin, rotMax))
+    AmbientObjects[#AmbientObjects + 1] = obj
+end
+
+local function BuildSnow()
+    -- Original Saiki Music uses 24 particles; this version is deliberately denser.
+    for i = 1, 58 do
+        AddFallingParticle(
+            SNOW_FLAKES[((i - 1) % #SNOW_FLAKES) + 1], "Snow_" .. i,
+            10, 24, 0.055, 0.13, 0.008, 0.024, -18, 18, 0.10, 0.34
+        )
+    end
+end
+
+local function BuildCherry()
+    -- Same asset family and motion ranges as the original Saiki Music cherry effect.
+    for i = 1, 42 do
+        AddFallingParticle(
+            CHERRY_LEAVES[((i - 1) % #CHERRY_LEAVES) + 1], "CherryLeaf_" .. i,
+            14, 30, 0.045, 0.095, 0.012, 0.035, -75, 75, 0.05, 0.22
+        )
+    end
+end
+
+local function BuildMatrix()
+    for i = 1, 30 do
+        local column = New("TextLabel", {
+            Name = "MatrixColumn_" .. i,
+            AnchorPoint = Vector2.new(0.5, 0),
+            Size = UDim2.fromOffset(15, AmbientRandom:NextInteger(170, 330)),
+            Position = UDim2.new((i - 0.5) / 30, 0, AmbientRandom:NextNumber(-1.0, 1.0), 0),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Font = Enum.Font.Code,
+            TextSize = AmbientRandom:NextInteger(11, 16),
+            TextColor3 = Color3.fromRGB(56, 215, 108),
+            TextTransparency = AmbientRandom:NextNumber(0.22, 0.65),
+            TextWrapped = true,
+            Text = "",
+            ZIndex = 1,
+        }, AmbientLayer)
+        local out = {}
+        for j = 1, AmbientRandom:NextInteger(14, 28) do
+            out[j] = AmbientRandom:NextNumber() > 0.5 and "0" or "1"
+        end
+        column.Text = table.concat(out, "\n")
+        column:SetAttribute("Y", column.Position.Y.Scale)
+        column:SetAttribute("Speed", AmbientRandom:NextNumber(0.32, 0.72))
+        AmbientObjects[#AmbientObjects + 1] = column
+    end
+end
+
+local function BuildAmbientForTheme()
+    ClearAmbient()
+    if CurrentThemeName == "Snow" then
+        BuildSnow()
+    elseif CurrentThemeName == "Lovely" then
+        BuildCherry()
+    elseif CurrentThemeName == "Hacker" then
+        BuildMatrix()
+    end
+    AmbientLayer.Visible = MainGui.Enabled and #AmbientObjects > 0
+end
+
+RunService.RenderStepped:Connect(function(dt)
+    if not AmbientLayer.Visible or #AmbientObjects == 0 then return end
+    AmbientTime += dt
+    if CurrentThemeName == "Snow" or CurrentThemeName == "Lovely" then
+        for _, obj in ipairs(AmbientObjects) do
+            if obj and obj.Parent then
+                local x = obj:GetAttribute("X") or obj.Position.X.Scale
+                local y = (obj:GetAttribute("Y") or obj.Position.Y.Scale) + (obj:GetAttribute("Speed") or 0.06) * dt
+                if y > 1.12 then
+                    y = AmbientRandom:NextNumber(-0.18, -0.05)
+                    x = AmbientRandom:NextNumber(-0.05, 1.05)
+                    obj:SetAttribute("X", x)
+                end
+                obj:SetAttribute("Y", y)
+                local drift = math.sin(AmbientTime * (obj:GetAttribute("SwaySpeed") or 1) + (obj:GetAttribute("Phase") or 0)) * (obj:GetAttribute("Sway") or 0.015)
+                obj.Position = UDim2.new(x + drift, 0, y, 0)
+                obj.Rotation += (obj:GetAttribute("RotSpeed") or 0) * dt
+            end
+        end
+    elseif CurrentThemeName == "Hacker" then
+        for _, obj in ipairs(AmbientObjects) do
+            if obj and obj.Parent then
+                local y = (obj:GetAttribute("Y") or obj.Position.Y.Scale) + (obj:GetAttribute("Speed") or 0.45) * dt
+                if y > 1.08 then
+                    y = AmbientRandom:NextNumber(-1.0, -0.12)
+                    local out = {}
+                    for j = 1, AmbientRandom:NextInteger(14, 28) do
+                        out[j] = AmbientRandom:NextNumber() > 0.5 and "0" or "1"
+                    end
+                    obj.Text = table.concat(out, "\n")
+                    obj.TextTransparency = AmbientRandom:NextNumber(0.20, 0.62)
+                end
+                obj:SetAttribute("Y", y)
+                obj.Position = UDim2.new(obj.Position.X.Scale, 0, y, 0)
+            end
+        end
+    end
+end)
 
 local ToggleGui = New("ScreenGui", {
     Name = "SaikiEmotesToggle",
@@ -561,6 +724,7 @@ end
 -- the ScreenGui directly.
 MainGui:GetPropertyChangedSignal("Enabled"):Connect(function()
     SetBackgroundBlur(MainGui.Enabled, false)
+    if AmbientLayer then AmbientLayer.Visible = MainGui.Enabled and #AmbientObjects > 0 end
 end)
 
 --============================================================
@@ -709,8 +873,8 @@ New("TextLabel", {
     Size = UDim2.fromOffset(22, 30),
     BackgroundTransparency = 1,
     Font = BOLD,
-    Text = "⌕",
-    TextSize = 16,
+    Text = "🔎",
+    TextSize = 14,
     TextColor3 = MUTED,
     ZIndex = 6,
 }, SearchHolder)
@@ -2383,6 +2547,7 @@ UpdateThemeValue()
 Loop.BackgroundColor3 = Settings.Looped and RED or BLACK_2
 SelectTab("Emotes")
 ApplyTheme(CurrentThemeName)
+BuildAmbientForTheme()
 RefreshThemeChrome()
 UpdateAnchorButton()
 UpdateThemeValue()
