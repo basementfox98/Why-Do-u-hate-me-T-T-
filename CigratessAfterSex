@@ -1,6 +1,5 @@
--- SAIKI EMOTES V39 — HARD BOOT / ERROR REPORTER
--- This launcher intentionally creates a tiny boot panel first, then compiles the full script.
--- If anything fails, the exact error is shown instead of silently doing nothing.
+-- SAIKI EMOTES V40 — STABLE BASE
+-- Reliable staged boot: compile/run the core in its own chunk, report any error, then remove the boot panel.
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local player = Players.LocalPlayer
@@ -28,7 +27,7 @@ local title=Instance.new("TextLabel")
 title.Size=UDim2.new(1,-20,0,30)
 title.Position=UDim2.fromOffset(10,8)
 title.BackgroundTransparency=1
-title.Text="SAIKI EMOTES • BOOT CHECK"
+title.Text="SAIKI EMOTES • STABLE BOOT"
 title.Font=Enum.Font.GothamBold
 title.TextSize=14
 title.TextColor3=Color3.new(1,1,1)
@@ -37,7 +36,7 @@ local msg=Instance.new("TextLabel")
 msg.Size=UDim2.new(1,-30,1,-50)
 msg.Position=UDim2.fromOffset(15,42)
 msg.BackgroundTransparency=1
-msg.Text="Compiling Saiki Emotes..."
+msg.Text="Starting stable base..."
 msg.Font=Enum.Font.Gotham
 msg.TextSize=11
 msg.TextWrapped=true
@@ -46,6 +45,7 @@ msg.Parent=frame
 local function show(text) msg.Text=tostring(text) end
 task.defer(function()
     local source = [=[
+
 --[[
     SAIKI EMOTES — GAZE EDITION + VEX FEATURES + V34 HISTORY IMPROVEMENTS
     Compact rebuild based on the supplied GazeOld + Saiki Music references.
@@ -99,9 +99,8 @@ task.defer(function()
 --==============================================================
 -- SERVICES / SAFE BOOT
 --==============================================================
--- V38 SAFE BOOT: Firebase/cloud networking is intentionally not initialized here.
--- The core GUI must load independently; cloud integration will be added only after
--- the base build is confirmed working. This avoids startup failures from executor HTTP.
+-- V40 STABLE BASE: Firebase/cloud networking remains intentionally isolated from the core GUI.
+-- The working base must stay independent of external networking during startup.
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -609,6 +608,7 @@ loadSaved()
 -- inspect a friend's currently playing animation, and create a shareable
 -- request code instead of inventing a RemoteEvent/Firebase protocol.
 local renderFriends
+local FriendsList
 
 local function isServerFriend(other)
     if not other or other == player then return false end
@@ -1454,7 +1454,7 @@ local FriendsInfo = create("TextLabel", {
     ZIndex = 6,
 }, FriendsFrame)
 
-local FriendsList = create("ScrollingFrame", {
+FriendsList = create("ScrollingFrame", {
     Size = UDim2.new(1,0,1,-70),
     Position = UDim2.fromOffset(0,35),
     BackgroundColor3 = Color3.fromRGB(255,255,255),
@@ -3187,26 +3187,27 @@ end)
 
 print("[SAIKI EMOTES] Gaze Edition loaded.")
 
+
 ]=]
     local compiler = loadstring or load
     if type(compiler) ~= "function" then
         show("BOOT ERROR\nloadstring/load is unavailable in this executor.")
-        warn("[SAIKI EMOTES V39] loadstring/load unavailable")
+        warn("[SAIKI EMOTES V40] loadstring/load unavailable")
         return
     end
-    local okCompile, chunkOrError = pcall(compiler, source, "SaikiEmotes_V39")
+    local okCompile, chunkOrError = pcall(compiler, source, "SaikiEmotes_V40_Core")
     if not okCompile or type(chunkOrError) ~= "function" then
         show("COMPILE ERROR\n"..tostring(chunkOrError))
-        warn("[SAIKI EMOTES V39 COMPILE ERROR]", chunkOrError)
+        warn("[SAIKI EMOTES V40 COMPILE ERROR]", chunkOrError)
         return
     end
-    show("Running core...\nIf it fails, the exact runtime error will appear here.")
+    show("Starting core...")
     local okRun, runError = xpcall(chunkOrError, function(err)
         return debug and debug.traceback and debug.traceback(tostring(err),2) or tostring(err)
     end)
     if not okRun then
         show("RUNTIME ERROR\n"..tostring(runError))
-        warn("[SAIKI EMOTES V39 RUNTIME ERROR]", runError)
+        warn("[SAIKI EMOTES V40 RUNTIME ERROR]", runError)
         return
     end
     if gui and gui.Parent then gui:Destroy() end
