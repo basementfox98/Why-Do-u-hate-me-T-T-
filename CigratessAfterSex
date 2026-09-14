@@ -79,14 +79,8 @@ local Settings = {
 --// EMOTE DATA
 --//============================================================
 
--- Fallbacks guarantee that the GUI still opens if HTTP is unavailable.
-local FallbackEmotes = {
-    {id = 3576686446, name = "Wave"},
-    {id = 3576823880, name = "Point"},
-    {id = 3576720708, name = "Dance"},
-    {id = 3576777185, name = "Laugh"},
-    {id = 3576738018, name = "Cheer"},
-}
+-- The full database is loaded from the same VEX emotes endpoint.
+-- No small fake fallback list is used when the database is unavailable.
 
 local Emotes = {}
 local Favorites = {}
@@ -94,7 +88,7 @@ local FavoritesSet = {}
 
 local CurrentTab = "Emotes"
 local CurrentPage = 1
-local PAGE_SIZE = 25
+local PAGE_SIZE = 20
 
 local CurrentEmote = nil
 local CurrentTrack = nil
@@ -215,8 +209,9 @@ local Window = New("Frame", {
     Name = "Window",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(720, 500),
+    Size = UDim2.fromOffset(600, 410),
     BackgroundColor3 = BLACK,
+    BackgroundTransparency = 0.06,
     BorderSizePixel = 0,
     ClipsDescendants = false,
 }, MainGui)
@@ -229,6 +224,7 @@ local Inner = New("Frame", {
     Position = UDim2.fromOffset(3, 3),
     Size = UDim2.new(1, -6, 1, -6),
     BackgroundColor3 = PANEL,
+    BackgroundTransparency = 0.14,
     BorderSizePixel = 0,
     ClipsDescendants = true,
 }, Window)
@@ -241,55 +237,56 @@ AddCorner(Inner, 13)
 
 local Header = New("Frame", {
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.new(1, 0, 0, 62),
+    Size = UDim2.new(1, 0, 0, 50),
     BackgroundColor3 = BLACK_2,
+    BackgroundTransparency = 0.18,
     BorderSizePixel = 0,
 }, Inner)
 
 local HeaderAccent = New("Frame", {
-    Position = UDim2.fromOffset(0, 60),
+    Position = UDim2.fromOffset(0, 48),
     Size = UDim2.new(1, 0, 0, 2),
     BackgroundColor3 = THEME_RED,
     BorderSizePixel = 0,
 }, Header)
 
 local TitleIcon = New("TextLabel", {
-    Position = UDim2.fromOffset(18, 10),
-    Size = UDim2.fromOffset(40, 40),
+    Position = UDim2.fromOffset(14, 7),
+    Size = UDim2.fromOffset(34, 34),
     BackgroundTransparency = 1,
     Font = FONT_BOLD,
     Text = "♟",
-    TextSize = 32,
+    TextSize = 27,
     TextColor3 = WHITE,
 }, Header)
 SetTextGradient(TitleIcon)
 
 local Title = New("TextLabel", {
-    Position = UDim2.fromOffset(64, 10),
-    Size = UDim2.fromOffset(300, 24),
+    Position = UDim2.fromOffset(56, 7),
+    Size = UDim2.fromOffset(260, 21),
     BackgroundTransparency = 1,
     Font = FONT_BOLD,
     Text = "SAIKI EMOTES",
-    TextSize = 18,
+    TextSize = 16,
     TextXAlignment = Enum.TextXAlignment.Left,
     TextColor3 = WHITE,
 }, Header)
 SetTextGradient(Title)
 
 local Subtitle = New("TextLabel", {
-    Position = UDim2.fromOffset(65, 34),
-    Size = UDim2.fromOffset(360, 18),
+    Position = UDim2.fromOffset(57, 28),
+    Size = UDim2.fromOffset(300, 14),
     BackgroundTransparency = 1,
     Font = FONT,
     Text = "EMOTE PLAYER",
-    TextSize = 9,
+    TextSize = 8,
     TextXAlignment = Enum.TextXAlignment.Left,
     TextColor3 = MUTED,
 }, Header)
 
 -- Status dot
 local StatusDot = New("Frame", {
-    Position = UDim2.new(1, -150, 0.5, -5),
+    Position = UDim2.new(1, -112, 0.5, -5),
     Size = UDim2.fromOffset(10, 10),
     BackgroundColor3 = Color3.fromRGB(70, 235, 120),
     BorderSizePixel = 0,
@@ -297,20 +294,20 @@ local StatusDot = New("Frame", {
 AddCorner(StatusDot, 5)
 
 local StatusText = New("TextLabel", {
-    Position = UDim2.new(1, -133, 0.5, -9),
-    Size = UDim2.fromOffset(95, 18),
+    Position = UDim2.new(1, -97, 0.5, -8),
+    Size = UDim2.fromOffset(70, 16),
     BackgroundTransparency = 1,
     Font = FONT,
     Text = "READY",
-    TextSize = 9,
+    TextSize = 8,
     TextColor3 = MUTED,
     TextXAlignment = Enum.TextXAlignment.Left,
 }, Header)
 
 -- No hide button here, deliberately.
 local HeaderLine = New("Frame", {
-    Position = UDim2.new(1, -25, 0, 16),
-    Size = UDim2.fromOffset(4, 30),
+    Position = UDim2.new(1, -20, 0, 11),
+    Size = UDim2.fromOffset(3, 28),
     BackgroundColor3 = THEME_RED,
     BorderSizePixel = 0,
 }, Header)
@@ -321,9 +318,10 @@ AddCorner(HeaderLine, 2)
 --//============================================================
 
 local SearchHolder = New("Frame", {
-    Position = UDim2.fromOffset(16, 76),
-    Size = UDim2.new(1, -32, 0, 38),
+    Position = UDim2.fromOffset(12, 62),
+    Size = UDim2.new(1, -24, 0, 32),
     BackgroundColor3 = BLACK_2,
+    BackgroundTransparency = 0.28,
     BorderSizePixel = 0,
 }, Inner)
 
@@ -332,7 +330,7 @@ AddStroke(SearchHolder, Color3.fromRGB(57, 27, 34), 1)
 
 local SearchIcon = New("TextLabel", {
     Position = UDim2.fromOffset(12, 0),
-    Size = UDim2.fromOffset(25, 38),
+    Size = UDim2.fromOffset(22, 32),
     BackgroundTransparency = 1,
     Font = FONT_BOLD,
     Text = "⌕",
@@ -341,8 +339,8 @@ local SearchIcon = New("TextLabel", {
 }, SearchHolder)
 
 local Search = New("TextBox", {
-    Position = UDim2.fromOffset(38, 0),
-    Size = UDim2.new(1, -50, 1, 0),
+    Position = UDim2.fromOffset(34, 0),
+    Size = UDim2.new(1, -46, 1, 0),
     BackgroundTransparency = 1,
     ClearTextOnFocus = false,
     Font = FONT,
@@ -350,7 +348,7 @@ local Search = New("TextBox", {
     PlaceholderColor3 = MUTED,
     Text = "",
     TextColor3 = WHITE,
-    TextSize = 11,
+    TextSize = 10,
     TextXAlignment = Enum.TextXAlignment.Left,
 }, SearchHolder)
 
@@ -359,8 +357,8 @@ local Search = New("TextBox", {
 --//============================================================
 
 local GridHolder = New("Frame", {
-    Position = UDim2.fromOffset(16, 124),
-    Size = UDim2.new(1, -32, 1, -205),
+    Position = UDim2.fromOffset(12, 104),
+    Size = UDim2.new(1, -24, 1, -169),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
 }, Inner)
@@ -379,8 +377,8 @@ local Grid = New("ScrollingFrame", {
 }, GridHolder)
 
 local GridLayout = New("UIGridLayout", {
-    CellSize = UDim2.fromOffset(126, 145),
-    CellPadding = UDim2.fromOffset(10, 10),
+    CellSize = UDim2.fromOffset(105, 126),
+    CellPadding = UDim2.fromOffset(8, 8),
     SortOrder = Enum.SortOrder.LayoutOrder,
 }, Grid)
 
@@ -394,15 +392,16 @@ New("UIPadding", {
 --//============================================================
 
 local BottomBar = New("Frame", {
-    Position = UDim2.new(0, 0, 1, -72),
-    Size = UDim2.new(1, 0, 0, 72),
+    Position = UDim2.new(0, 0, 1, -54),
+    Size = UDim2.new(1, 0, 0, 54),
     BackgroundColor3 = BLACK_2,
+    BackgroundTransparency = 0.16,
     BorderSizePixel = 0,
 }, Inner)
 
 local BottomAccent = New("Frame", {
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.new(1, 0, 0, 2),
+    Size = UDim2.new(1, 0, 0, 1),
     BackgroundColor3 = DARK_RED,
     BorderSizePixel = 0,
 }, BottomBar)
@@ -412,8 +411,8 @@ local TabButtons = {}
 local function MakeBottomTab(name, text, xScale)
     local button = New("TextButton", {
         Name = name,
-        Position = UDim2.new(xScale, 0, 0, 10),
-        Size = UDim2.new(0.5, -14, 0, 48),
+        Position = UDim2.new(xScale, 0, 0, 6),
+        Size = UDim2.new(0.5, -10, 0, 40),
         BackgroundColor3 = BLACK_2,
         BorderSizePixel = 0,
         AutoButtonColor = false,
@@ -435,8 +434,8 @@ MakeBottomTab("Favorites", "FAVORITES", 0.5)
 
 local PageLabel = New("TextLabel", {
     AnchorPoint = Vector2.new(0.5, 0),
-    Position = UDim2.new(0.5, 0, 1, -34),
-    Size = UDim2.fromOffset(180, 18),
+    Position = UDim2.new(0.5, 0, 1, -25),
+    Size = UDim2.fromOffset(140, 16),
     BackgroundTransparency = 1,
     Font = FONT_BOLD,
     Text = "1 / 1",
@@ -451,8 +450,8 @@ local PageLabel = New("TextLabel", {
 local Hud = New("Frame", {
     Name = "EmoteControlHUD",
     AnchorPoint = Vector2.new(0.5, 1),
-    Position = UDim2.new(0.5, 0, 1, -84),
-    Size = UDim2.fromOffset(430, 66),
+    Position = UDim2.new(0.5, 0, 1, -64),
+    Size = UDim2.fromOffset(390, 58),
     BackgroundColor3 = BLACK,
     BorderSizePixel = 0,
     Visible = false,
@@ -466,14 +465,15 @@ local HudInner = New("Frame", {
     Position = UDim2.fromOffset(2, 2),
     Size = UDim2.new(1, -4, 1, -4),
     BackgroundColor3 = PANEL,
+    BackgroundTransparency = 0.16,
     BorderSizePixel = 0,
     ZIndex = 51,
 }, Hud)
 AddCorner(HudInner, 9)
 
 local HudName = New("TextLabel", {
-    Position = UDim2.fromOffset(12, 7),
-    Size = UDim2.fromOffset(175, 20),
+    Position = UDim2.fromOffset(10, 6),
+    Size = UDim2.fromOffset(155, 18),
     BackgroundTransparency = 1,
     Font = FONT_BOLD,
     Text = "No emote",
@@ -485,33 +485,34 @@ local HudName = New("TextLabel", {
 SetTextGradient(HudName)
 
 local HudSpeed = New("TextLabel", {
-    Position = UDim2.fromOffset(12, 29),
-    Size = UDim2.fromOffset(100, 16),
+    Position = UDim2.fromOffset(10, 26),
+    Size = UDim2.fromOffset(90, 14),
     BackgroundTransparency = 1,
     Font = FONT,
     Text = "Speed 1.0x",
-    TextSize = 9,
+    TextSize = 8,
     TextColor3 = MUTED,
     TextXAlignment = Enum.TextXAlignment.Left,
     ZIndex = 52,
 }, HudInner)
 
 local HudTime = New("TextLabel", {
-    Position = UDim2.fromOffset(115, 29),
-    Size = UDim2.fromOffset(82, 16),
+    Position = UDim2.fromOffset(103, 26),
+    Size = UDim2.fromOffset(70, 14),
     BackgroundTransparency = 1,
     Font = FONT,
     Text = "Playing",
-    TextSize = 9,
+    TextSize = 8,
     TextColor3 = MUTED,
     TextXAlignment = Enum.TextXAlignment.Left,
     ZIndex = 52,
 }, HudInner)
 
 local SpeedDown = New("TextButton", {
-    Position = UDim2.new(1, -215, 0, 12),
+    Position = UDim2.new(1, -239, 0, 11),
     Size = UDim2.fromOffset(32, 32),
     BackgroundColor3 = PANEL_3,
+    BackgroundTransparency = 0.18,
     BorderSizePixel = 0,
     AutoButtonColor = false,
     Font = FONT_BOLD,
@@ -523,8 +524,8 @@ local SpeedDown = New("TextButton", {
 AddCorner(SpeedDown, 7)
 
 local SpeedValue = New("TextLabel", {
-    Position = UDim2.new(1, -177, 0, 12),
-    Size = UDim2.fromOffset(58, 32),
+    Position = UDim2.new(1, -185, 0, 11),
+    Size = UDim2.fromOffset(50, 32),
     BackgroundColor3 = PANEL_3,
     BorderSizePixel = 0,
     Font = FONT_BOLD,
@@ -537,7 +538,7 @@ AddCorner(SpeedValue, 7)
 SetTextGradient(SpeedValue)
 
 local SpeedUp = New("TextButton", {
-    Position = UDim2.new(1, -141, 0, 12),
+    Position = UDim2.new(1, -149, 0, 11),
     Size = UDim2.fromOffset(32, 32),
     BackgroundColor3 = PANEL_3,
     BorderSizePixel = 0,
@@ -551,7 +552,7 @@ local SpeedUp = New("TextButton", {
 AddCorner(SpeedUp, 7)
 
 local LoopButton = New("TextButton", {
-    Position = UDim2.new(1, -149, 0, 12),
+    Position = UDim2.new(1, -103, 0, 11),
     Size = UDim2.fromOffset(42, 32),
     BackgroundColor3 = THEME_RED,
     BorderSizePixel = 0,
@@ -565,21 +566,21 @@ local LoopButton = New("TextButton", {
 AddCorner(LoopButton, 7)
 
 local PauseButton = New("TextButton", {
-    Position = UDim2.new(1, -103, 0, 12),
+    Position = UDim2.new(1, -57, 0, 11),
     Size = UDim2.fromOffset(42, 32),
     BackgroundColor3 = PANEL_3,
     BorderSizePixel = 0,
     AutoButtonColor = false,
     Font = FONT_BOLD,
     Text = "II",
-    TextSize = 11,
+    TextSize = 10,
     TextColor3 = WHITE,
     ZIndex = 52,
 }, HudInner)
 AddCorner(PauseButton, 7)
 
 local StopButton = New("TextButton", {
-    Position = UDim2.new(1, -57, 0, 12),
+    Position = UDim2.new(1, -11, 0, 11),
     Size = UDim2.fromOffset(42, 32),
     BackgroundColor3 = THEME_RED,
     BorderSizePixel = 0,
@@ -671,6 +672,10 @@ local function HttpGet(url)
         local ok, response = pcall(requestFunction, {
             Url = url,
             Method = "GET",
+            Headers = {
+                ["Accept"] = "application/json",
+                ["Cache-Control"] = "no-cache",
+            },
         })
 
         if ok and response then
@@ -685,7 +690,7 @@ local function HttpGet(url)
         return game:HttpGet(url)
     end)
 
-    if ok and type(result) == "string" then
+    if ok and type(result) == "string" and #result > 2 then
         return result
     end
 
@@ -707,7 +712,7 @@ local function NormaliseEmote(entry)
     end
 
     if not name or tostring(name) == "" then
-        name = "Emote " .. tostring(id)
+        return nil
     end
 
     return {
@@ -717,65 +722,70 @@ local function NormaliseEmote(entry)
 end
 
 local function LoadEmotes()
-    -- This is the public JSON endpoint used by the supplied VEX database.
-    -- No VEX API secret or account/session system is copied into Saiki.
+    -- Same emote database endpoint used by the supplied VEX script.
+    -- The Saiki version does not embed VEX's private authentication secret.
     local url = "https://vexroscripts.com.tr/api/emotes.json?t=" .. tostring(math.floor(os.clock() * 1000))
 
-    local raw = HttpGet(url)
-    if not raw then
-        return false
-    end
+    for attempt = 1, 3 do
+        local raw = HttpGet(url)
 
-    local decoded = SafeCall(function()
-        return HttpService:JSONDecode(raw)
-    end)
+        if raw and (raw:sub(1, 1) == "{" or raw:sub(1, 1) == "[") then
+            local decoded = SafeCall(function()
+                return HttpService:JSONDecode(raw)
+            end)
 
-    if type(decoded) ~= "table" then
-        return false
-    end
+            if type(decoded) == "table" then
+                local source = decoded.data or decoded.emotes or decoded
 
-    local source = decoded
-    if decoded.emotes and type(decoded.emotes) == "table" then
-        source = decoded.emotes
-    end
+                if type(source) == "table" then
+                    local loaded = {}
+                    local seen = {}
 
-    local loaded = {}
+                    for _, entry in ipairs(source) do
+                        local emote = NormaliseEmote(entry)
 
-    for _, entry in pairs(source) do
-        local emote = NormaliseEmote(entry)
-        if emote then
-            table.insert(loaded, emote)
+                        if emote and not seen[emote.id] then
+                            seen[emote.id] = true
+                            loaded[#loaded + 1] = emote
+                        end
+                    end
+
+                    if #loaded > 0 then
+                        table.sort(loaded, function(a, b)
+                            return string.lower(a.name) < string.lower(b.name)
+                        end)
+
+                        Emotes = loaded
+                        return true
+                    end
+                end
+            end
+        end
+
+        if attempt < 3 then
+            task.wait(1)
         end
     end
 
-    if #loaded == 0 then
-        return false
-    end
-
-    table.sort(loaded, function(a, b)
-        return string.lower(a.name) < string.lower(b.name)
-    end)
-
-    Emotes = loaded
-    return true
+    return false
 end
 
 task.spawn(function()
-    StatusText.Text = "LOADING"
+    StatusText.Text = "LOADING DATABASE"
 
     local loaded = LoadEmotes()
 
     if not loaded then
-        Emotes = table.clone(FallbackEmotes)
-        StatusText.Text = "FALLBACK"
+        -- Do not pretend five fallback emotes are the full database.
+        -- The user explicitly requested the complete VEX-sized database.
+        Emotes = {}
+        StatusText.Text = "DATABASE OFFLINE"
     else
-        StatusText.Text = "READY"
+        StatusText.Text = string.format("%d EMOTES", #Emotes)
     end
 
     task.defer(function()
         CurrentPage = 1
-        -- RenderCurrentTab is declared below; call through a queued function
-        -- after the function exists.
         if RenderCurrentTab then
             RenderCurrentTab()
         end
@@ -1026,8 +1036,9 @@ end
 local function CreateCard(emote, layoutOrder)
     local card = New("Frame", {
         Name = "EmoteCard",
-        Size = UDim2.fromOffset(126, 145),
+        Size = UDim2.fromOffset(105, 126),
         BackgroundColor3 = BLACK_2,
+        BackgroundTransparency = 0.18,
         BorderSizePixel = 0,
         LayoutOrder = layoutOrder,
     }, Grid)
@@ -1064,8 +1075,8 @@ local function CreateCard(emote, layoutOrder)
 
     local Cover = New("ImageButton", {
         Name = "Cover",
-        Position = UDim2.fromOffset(5, 5),
-        Size = UDim2.fromOffset(116, 104),
+        Position = UDim2.fromOffset(4, 4),
+        Size = UDim2.fromOffset(97, 89),
         BackgroundColor3 = PANEL_3,
         BorderSizePixel = 0,
         AutoButtonColor = false,
@@ -1078,8 +1089,8 @@ local function CreateCard(emote, layoutOrder)
     local CoverStroke = AddStroke(Cover, Color3.fromRGB(70, 19, 28), 1)
 
     local CoverOverlay = New("Frame", {
-        Position = UDim2.new(0, 0, 1, -25),
-        Size = UDim2.new(1, 0, 0, 25),
+        Position = UDim2.new(0, 0, 1, -20),
+        Size = UDim2.new(1, 0, 0, 20),
         BackgroundColor3 = BLACK,
         BackgroundTransparency = 0.18,
         BorderSizePixel = 0,
@@ -1089,12 +1100,12 @@ local function CreateCard(emote, layoutOrder)
 
     -- The name is the only text displayed on the card.
     local Name = New("TextLabel", {
-        Position = UDim2.fromOffset(7, 111),
-        Size = UDim2.new(1, -38, 0, 27),
+        Position = UDim2.fromOffset(6, 96),
+        Size = UDim2.new(1, -34, 0, 24),
         BackgroundTransparency = 1,
         Font = FONT_BOLD,
         Text = emote.name,
-        TextSize = 10,
+        TextSize = 9,
         TextWrapped = true,
         TextTruncate = Enum.TextTruncate.AtEnd,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -1104,8 +1115,8 @@ local function CreateCard(emote, layoutOrder)
     SetTextGradient(Name)
 
     local Favorite = New("TextButton", {
-        Position = UDim2.new(1, -31, 1, -34),
-        Size = UDim2.fromOffset(25, 25),
+        Position = UDim2.new(1, -29, 1, -29),
+        Size = UDim2.fromOffset(23, 23),
         BackgroundColor3 = PANEL_3,
         BorderSizePixel = 0,
         AutoButtonColor = false,
@@ -1191,9 +1202,11 @@ function RenderCurrentTab()
             Size = UDim2.new(1, -10, 0, 100),
             BackgroundTransparency = 1,
             Font = FONT_BOLD,
-            Text = CurrentTab == "Favorites"
-                and "No favorite emotes yet."
-                or "No emotes found.",
+            Text = (#Emotes == 0 and CurrentTab == "Emotes")
+                and "The emote database could not be loaded."
+                or (CurrentTab == "Favorites"
+                    and "No favorite emotes yet."
+                    or "No emotes found."),
             TextSize = 13,
             TextColor3 = MUTED,
             TextWrapped = true,
@@ -1220,8 +1233,8 @@ end
 --//============================================================
 
 local PrevPage = New("TextButton", {
-    Position = UDim2.new(0, 18, 1, -53),
-    Size = UDim2.fromOffset(38, 30),
+    Position = UDim2.new(0, 12, 1, -43),
+    Size = UDim2.fromOffset(32, 28),
     BackgroundColor3 = PANEL_3,
     BorderSizePixel = 0,
     AutoButtonColor = false,
@@ -1235,8 +1248,8 @@ AddCorner(PrevPage, 7)
 AddStroke(PrevPage, DARK_RED, 1)
 
 local NextPage = New("TextButton", {
-    Position = UDim2.new(1, -56, 1, -53),
-    Size = UDim2.fromOffset(38, 30),
+    Position = UDim2.new(1, -44, 1, -43),
+    Size = UDim2.fromOffset(32, 28),
     BackgroundColor3 = PANEL_3,
     BorderSizePixel = 0,
     AutoButtonColor = false,
