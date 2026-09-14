@@ -1662,7 +1662,19 @@ local function SelectTab(tab)
         PageArea.Visible = true
         PrevPage.Visible = true
         NextPage.Visible = true
-        NewSearch()
+
+        -- Returning to EMOTES must preserve the page the user was on.
+        -- Only load page 1 on the very first entry, or when there is no
+        -- cached/current catalog state yet. Switching tabs must not reset it.
+        if not CatalogCache[SearchQuery] or not CatalogCache[SearchQuery].uiPages[CurrentPage] then
+            LoadCatalogPage(CurrentPage)
+        else
+            local cache = CatalogCache[SearchQuery]
+            CurrentPagesObject = cache.pages
+            StatusText.Text = "CATALOG"
+            StatusDot.BackgroundColor3 = GREEN
+            RenderCatalogEntries(cache.uiPages[CurrentPage], CurrentPage, cache.uiFinished[CurrentPage], SearchGeneration)
+        end
     elseif favoritesActive then
         RenderFavorites()
     else
@@ -1690,10 +1702,13 @@ TabSettings.MouseButton1Click:Connect(function()
 end)
 
 Search.FocusLost:Connect(function(enterPressed)
-    if enterPressed or CurrentTab == "Emotes" then
-        SearchQuery = Search.Text or ""
+    local newQuery = Search.Text or ""
+    if enterPressed or newQuery ~= SearchQuery then
+        SearchQuery = newQuery
         CurrentPage = 1
-        LoadCatalogPage(1)
+        if CurrentTab == "Emotes" then
+            LoadCatalogPage(1)
+        end
     end
 end)
 
