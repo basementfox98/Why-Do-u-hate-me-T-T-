@@ -25,6 +25,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
 local AvatarEditorService = game:GetService("AvatarEditorService")
 
 local Player = Players.LocalPlayer
@@ -377,20 +378,49 @@ local function ToggleFavorite(id)
     SaveFavorites()
 end
 
-local function ApplyTheme(name)
+local ThemeTransitionToken = 0
+
+local function ApplyTheme(name, animated)
+    local newTheme = ThemeDefinitions[name] or ThemeDefinitions.Blood
+    ThemeTransitionToken = ThemeTransitionToken + 1
+    local token = ThemeTransitionToken
+
     SetThemeColors(name)
-    local t = ThemeDefinitions[CurrentThemeName]
+    local duration = animated and 0.28 or 0
 
     for _, item in ipairs(ThemeObjects) do
         if item.object and item.object.Parent then
-            item.object[item.property] = t[item.role]
+            local target = newTheme[item.role]
+            if target then
+                if animated and typeof(item.object[item.property]) == "Color3" then
+                    TweenService:Create(item.object, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {[item.property] = target}):Play()
+                else
+                    item.object[item.property] = target
+                end
+            end
         end
     end
 
     for _, item in ipairs(ThemeStrokes) do
         if item.object and item.object.Parent then
-            item.object.Color = t[item.role]
+            local target = newTheme[item.role]
+            if target then
+                if animated then
+                    TweenService:Create(item.object, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Color = target}):Play()
+                else
+                    item.object.Color = target
+                end
+            end
         end
+    end
+
+    if animated then
+        task.delay(duration, function()
+            if token == ThemeTransitionToken then
+                ApplyTheme(name, false)
+            end
+        end)
+        return
     end
 
     local isAurora = CurrentThemeName == "Aurora"
@@ -398,17 +428,17 @@ local function ApplyTheme(name)
         if g and g.Parent then
             if isAurora then
                 g.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, t.WHITE),
-                    ColorSequenceKeypoint.new(0.28, t.WHITE),
-                    ColorSequenceKeypoint.new(0.58, t.ACCENT),
-                    ColorSequenceKeypoint.new(0.78, t.BRIGHT),
-                    ColorSequenceKeypoint.new(1, t.WHITE),
+                    ColorSequenceKeypoint.new(0, newTheme.WHITE),
+                    ColorSequenceKeypoint.new(0.28, newTheme.WHITE),
+                    ColorSequenceKeypoint.new(0.58, newTheme.ACCENT),
+                    ColorSequenceKeypoint.new(0.78, newTheme.BRIGHT),
+                    ColorSequenceKeypoint.new(1, newTheme.WHITE),
                 })
             else
                 g.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, t.WHITE),
-                    ColorSequenceKeypoint.new(0.52, t.SOFT),
-                    ColorSequenceKeypoint.new(1, t.ACCENT),
+                    ColorSequenceKeypoint.new(0, newTheme.WHITE),
+                    ColorSequenceKeypoint.new(0.52, newTheme.SOFT),
+                    ColorSequenceKeypoint.new(1, newTheme.ACCENT),
                 })
                 g.Offset = Vector2.zero
             end
@@ -419,25 +449,24 @@ local function ApplyTheme(name)
         if g and g.Parent then
             if isAurora then
                 g.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, t.WHITE),
-                    ColorSequenceKeypoint.new(0.24, t.ACCENT),
-                    ColorSequenceKeypoint.new(0.50, t.WHITE),
-                    ColorSequenceKeypoint.new(0.76, t.BRIGHT),
-                    ColorSequenceKeypoint.new(1, t.WHITE),
+                    ColorSequenceKeypoint.new(0, newTheme.WHITE),
+                    ColorSequenceKeypoint.new(0.24, newTheme.ACCENT),
+                    ColorSequenceKeypoint.new(0.50, newTheme.WHITE),
+                    ColorSequenceKeypoint.new(0.76, newTheme.BRIGHT),
+                    ColorSequenceKeypoint.new(1, newTheme.WHITE),
                 })
             else
                 g.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, t.DARK),
-                    ColorSequenceKeypoint.new(0.32, t.ACCENT),
-                    ColorSequenceKeypoint.new(0.50, t.BRIGHT),
-                    ColorSequenceKeypoint.new(0.68, t.ACCENT),
-                    ColorSequenceKeypoint.new(1, t.DARK),
+                    ColorSequenceKeypoint.new(0, newTheme.DARK),
+                    ColorSequenceKeypoint.new(0.32, newTheme.ACCENT),
+                    ColorSequenceKeypoint.new(0.50, newTheme.BRIGHT),
+                    ColorSequenceKeypoint.new(0.68, newTheme.ACCENT),
+                    ColorSequenceKeypoint.new(1, newTheme.DARK),
                 })
                 g.Offset = Vector2.zero
             end
         end
     end
-
 end
 
 -- Subtle animated gradient for Aurora. One lightweight loop drives the registered gradients.
@@ -480,6 +509,59 @@ local ToggleGui = New("ScreenGui", {
     IgnoreGuiInset = true,
     ZIndexBehavior = Enum.ZIndexBehavior.Global,
 }, PlayerGui)
+
+--============================================================
+-- BACKGROUND BLUR
+--============================================================
+
+local oldSaikiBlur = Lighting:FindFirstChild("SaikiEmotesBackgroundBlur")
+if oldSaikiBlur then oldSaikiBlur:Destroy() end
+
+local BackgroundBlur = Instance.new("BlurEffect")
+BackgroundBlur.Name = "SaikiEmotesBackgroundBlur"
+BackgroundBlur.Size = 0
+BackgroundBlur.Enabled = false
+BackgroundBlur.Parent = Lighting
+
+local BlurTween
+local function SetBackgroundBlur(blurred, instant)
+    if BlurTween then
+        pcall(function() BlurTween:Cancel() end)
+        BlurTween = nil
+    end
+
+    if blurred then
+        BackgroundBlur.Enabled = true
+        if instant then
+            BackgroundBlur.Size = 18
+        else
+            BackgroundBlur.Size = 0
+            BlurTween = TweenService:Create(BackgroundBlur, TweenInfo.new(0.26, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = 18})
+            BlurTween:Play()
+        end
+    else
+        if instant then
+            BackgroundBlur.Size = 0
+            BackgroundBlur.Enabled = false
+        else
+            BlurTween = TweenService:Create(BackgroundBlur, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = 0})
+            BlurTween:Play()
+            local tween = BlurTween
+            task.spawn(function()
+                tween.Completed:Wait()
+                if BackgroundBlur.Size <= 0.05 then
+                    BackgroundBlur.Enabled = false
+                end
+            end)
+        end
+    end
+end
+
+-- Keep the visual blur synchronized even if another part of the script toggles
+-- the ScreenGui directly.
+MainGui:GetPropertyChangedSignal("Enabled"):Connect(function()
+    SetBackgroundBlur(MainGui.Enabled, false)
+end)
 
 --============================================================
 -- MAIN WINDOW: SMALL GLASS
@@ -840,7 +922,7 @@ task.spawn(function()
     while true do
         task.wait(0.035)
         local t = ThemeDefinitions[CurrentThemeName] or ThemeDefinitions.Blood
-        local offset = (os.clock() * 0.18) % 2 - 1
+        local offset = (os.clock() * 1.05) % 2 - 1
         for button, gradient in pairs(TabGradients) do
             local active = (button == TabEmotes and CurrentTab == "Emotes")
                 or (button == TabFavorites and CurrentTab == "Favorites")
@@ -1942,9 +2024,13 @@ local function SelectTab(tab)
     TabFavorites.BackgroundColor3 = favoritesActive and GLASS_2 or BLACK_2
     TabSettings.BackgroundColor3 = settingsActive and GLASS_2 or BLACK_2
 
-    TabEmotes.TextColor3 = emotesActive and WHITE or MUTED
-    TabFavorites.TextColor3 = favoritesActive and WHITE or MUTED
-    TabSettings.TextColor3 = settingsActive and WHITE or MUTED
+    local tabTextInactive = ThemeDefinitions[CurrentThemeName].SOFT
+    TabEmotes.TextColor3 = emotesActive and WHITE or tabTextInactive
+    TabFavorites.TextColor3 = favoritesActive and WHITE or tabTextInactive
+    TabSettings.TextColor3 = settingsActive and WHITE or tabTextInactive
+    TabEmotes.TextTransparency = 0
+    TabFavorites.TextTransparency = 0
+    TabSettings.TextTransparency = 0
 
     EmoteTabStroke.Color = emotesActive and RED or DARK_RED
     FavoriteTabStroke.Color = favoritesActive and RED or DARK_RED
@@ -2108,11 +2194,18 @@ end
 ThemeButton.MouseButton1Click:Connect(function()
     local index = table.find(ThemeOrder, CurrentThemeName) or 1
     index = index % #ThemeOrder + 1
-    ApplyTheme(ThemeOrder[index])
-    RefreshThemeChrome()
-    UpdateAnchorButton()
-    Settings.Theme = CurrentThemeName
+    local nextTheme = ThemeOrder[index]
+    ApplyTheme(nextTheme, true)
+    Settings.Theme = nextTheme
     UpdateThemeValue()
+    task.delay(0.28, function()
+        if CurrentThemeName == nextTheme then
+            RefreshThemeChrome()
+            SelectTab(CurrentTab)
+            UpdateAnchorButton()
+            UpdateThemeValue()
+        end
+    end)
     SaveSettings()
 end)
 
@@ -2283,6 +2376,7 @@ Player.CharacterAdded:Connect(function()
 end)
 
 MainGui.Enabled = true
+SetBackgroundBlur(true, true)
 Hud.Visible = false
 UpdateAnchorButton()
 UpdateThemeValue()
