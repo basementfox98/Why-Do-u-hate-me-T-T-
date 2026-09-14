@@ -41,84 +41,79 @@ end
 --============================================================
 
 local ThemeDefinitions = {
-    -- Blood — deep charcoal glass + controlled crimson.
     ["Blood"] = {
-        BLACK = Color3.fromRGB(8, 8, 10),
-        BLACK_2 = Color3.fromRGB(15, 15, 18),
-        GLASS = Color3.fromRGB(24, 20, 22),
-        GLASS_2 = Color3.fromRGB(35, 27, 30),
-        HIGHLIGHT = Color3.fromRGB(58, 44, 48),
-        ACCENT = Color3.fromRGB(196, 36, 55),
-        BRIGHT = Color3.fromRGB(239, 62, 82),
-        DARK = Color3.fromRGB(111, 22, 36),
-        WHITE = Color3.fromRGB(248, 248, 250),
-        SOFT = Color3.fromRGB(220, 220, 224),
-        MUTED = Color3.fromRGB(145, 142, 147),
-        STAR = Color3.fromRGB(105, 103, 108),
+        BLACK = Color3.fromRGB(9, 9, 11),
+        BLACK_2 = Color3.fromRGB(17, 17, 20),
+        GLASS = Color3.fromRGB(23, 20, 23),
+        GLASS_2 = Color3.fromRGB(34, 27, 31),
+        HIGHLIGHT = Color3.fromRGB(52, 45, 49),
+        ACCENT = Color3.fromRGB(157, 27, 47),
+        BRIGHT = Color3.fromRGB(222, 51, 72),
+        DARK = Color3.fromRGB(79, 19, 31),
+        WHITE = Color3.fromRGB(246, 244, 246),
+        SOFT = Color3.fromRGB(205, 201, 205),
+        MUTED = Color3.fromRGB(139, 134, 141),
+        STAR = Color3.fromRGB(91, 87, 94),
     },
 
-    -- Snow — clean white/black, inspired by the reference's flat white panel.
     ["Snow"] = {
-        BLACK = Color3.fromRGB(247, 247, 249),
-        BLACK_2 = Color3.fromRGB(238, 238, 241),
-        GLASS = Color3.fromRGB(252, 252, 253),
-        GLASS_2 = Color3.fromRGB(232, 232, 235),
+        BLACK = Color3.fromRGB(246, 247, 248),
+        BLACK_2 = Color3.fromRGB(235, 237, 239),
+        GLASS = Color3.fromRGB(252, 253, 253),
+        GLASS_2 = Color3.fromRGB(225, 228, 231),
         HIGHLIGHT = Color3.fromRGB(255, 255, 255),
-        ACCENT = Color3.fromRGB(20, 20, 23),
-        BRIGHT = Color3.fromRGB(48, 48, 54),
-        DARK = Color3.fromRGB(7, 7, 9),
-        WHITE = Color3.fromRGB(25, 25, 29),
-        SOFT = Color3.fromRGB(72, 72, 78),
-        MUTED = Color3.fromRGB(116, 116, 124),
-        STAR = Color3.fromRGB(150, 150, 157),
+        ACCENT = Color3.fromRGB(25, 28, 32),
+        BRIGHT = Color3.fromRGB(7, 9, 11),
+        DARK = Color3.fromRGB(76, 80, 85),
+        WHITE = Color3.fromRGB(20, 22, 25),
+        SOFT = Color3.fromRGB(54, 58, 63),
+        MUTED = Color3.fromRGB(111, 116, 122),
+        STAR = Color3.fromRGB(145, 149, 154),
     },
 
-    -- Hacker — almost-black panels + restrained terminal green.
     ["Hacker"] = {
-        BLACK = Color3.fromRGB(6, 9, 7),
-        BLACK_2 = Color3.fromRGB(11, 16, 13),
-        GLASS = Color3.fromRGB(15, 24, 19),
-        GLASS_2 = Color3.fromRGB(20, 34, 26),
-        HIGHLIGHT = Color3.fromRGB(33, 57, 43),
-        ACCENT = Color3.fromRGB(35, 205, 105),
-        BRIGHT = Color3.fromRGB(83, 240, 145),
-        DARK = Color3.fromRGB(13, 112, 57),
-        WHITE = Color3.fromRGB(238, 250, 242),
-        SOFT = Color3.fromRGB(190, 218, 201),
-        MUTED = Color3.fromRGB(116, 148, 126),
-        STAR = Color3.fromRGB(79, 113, 91),
+        BLACK = Color3.fromRGB(7, 10, 9),
+        BLACK_2 = Color3.fromRGB(13, 17, 15),
+        GLASS = Color3.fromRGB(17, 23, 20),
+        GLASS_2 = Color3.fromRGB(23, 31, 27),
+        HIGHLIGHT = Color3.fromRGB(36, 50, 43),
+        ACCENT = Color3.fromRGB(30, 181, 91),
+        BRIGHT = Color3.fromRGB(71, 224, 128),
+        DARK = Color3.fromRGB(18, 88, 50),
+        WHITE = Color3.fromRGB(235, 244, 239),
+        SOFT = Color3.fromRGB(184, 207, 193),
+        MUTED = Color3.fromRGB(107, 133, 116),
+        STAR = Color3.fromRGB(72, 99, 81),
     },
 
-    -- Lovely — white + soft baby pink, not saturated hot pink.
     ["Lovely"] = {
-        BLACK = Color3.fromRGB(255, 250, 252),
-        BLACK_2 = Color3.fromRGB(250, 241, 246),
-        GLASS = Color3.fromRGB(255, 247, 250),
-        GLASS_2 = Color3.fromRGB(255, 232, 241),
+        BLACK = Color3.fromRGB(255, 249, 252),
+        BLACK_2 = Color3.fromRGB(251, 240, 246),
+        GLASS = Color3.fromRGB(255, 252, 254),
+        GLASS_2 = Color3.fromRGB(250, 225, 237),
         HIGHLIGHT = Color3.fromRGB(255, 255, 255),
-        ACCENT = Color3.fromRGB(226, 116, 153),
-        BRIGHT = Color3.fromRGB(244, 150, 180),
-        DARK = Color3.fromRGB(170, 72, 108),
-        WHITE = Color3.fromRGB(66, 42, 52),
-        SOFT = Color3.fromRGB(112, 82, 94),
-        MUTED = Color3.fromRGB(145, 116, 128),
-        STAR = Color3.fromRGB(184, 143, 157),
+        ACCENT = Color3.fromRGB(229, 133, 169),
+        BRIGHT = Color3.fromRGB(244, 169, 197),
+        DARK = Color3.fromRGB(167, 83, 119),
+        WHITE = Color3.fromRGB(68, 43, 54),
+        SOFT = Color3.fromRGB(105, 74, 88),
+        MUTED = Color3.fromRGB(148, 116, 131),
+        STAR = Color3.fromRGB(190, 147, 165),
     },
 
-    -- Aurora — white/black base with a looping turquoise/white accent.
     ["Aurora"] = {
         BLACK = Color3.fromRGB(247, 250, 250),
-        BLACK_2 = Color3.fromRGB(236, 241, 241),
-        GLASS = Color3.fromRGB(252, 254, 254),
-        GLASS_2 = Color3.fromRGB(228, 238, 238),
+        BLACK_2 = Color3.fromRGB(237, 243, 243),
+        GLASS = Color3.fromRGB(253, 255, 255),
+        GLASS_2 = Color3.fromRGB(226, 239, 238),
         HIGHLIGHT = Color3.fromRGB(255, 255, 255),
-        ACCENT = Color3.fromRGB(44, 205, 194),
-        BRIGHT = Color3.fromRGB(104, 244, 232),
-        DARK = Color3.fromRGB(18, 122, 118),
-        WHITE = Color3.fromRGB(25, 38, 39),
-        SOFT = Color3.fromRGB(75, 103, 104),
-        MUTED = Color3.fromRGB(108, 135, 136),
-        STAR = Color3.fromRGB(128, 157, 157),
+        ACCENT = Color3.fromRGB(37, 193, 184),
+        BRIGHT = Color3.fromRGB(104, 235, 222),
+        DARK = Color3.fromRGB(25, 112, 109),
+        WHITE = Color3.fromRGB(25, 39, 40),
+        SOFT = Color3.fromRGB(67, 94, 95),
+        MUTED = Color3.fromRGB(104, 132, 133),
+        STAR = Color3.fromRGB(126, 158, 158),
     },
 }
 
@@ -262,11 +257,11 @@ local function MovingBorder(object, thickness)
     local stroke = Stroke(object, RED, thickness or 1.5)
     local gradient = Instance.new("UIGradient")
     gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, BLACK),
-        ColorSequenceKeypoint.new(0.30, BRIGHT_RED),
-        ColorSequenceKeypoint.new(0.50, BLACK),
+        ColorSequenceKeypoint.new(0, DARK_RED),
+        ColorSequenceKeypoint.new(0.28, BRIGHT_RED),
+        ColorSequenceKeypoint.new(0.50, DARK_RED),
         ColorSequenceKeypoint.new(0.72, BRIGHT_RED),
-        ColorSequenceKeypoint.new(1, BLACK),
+        ColorSequenceKeypoint.new(1, DARK_RED),
     })
     gradient.Parent = stroke
     table.insert(ThemeBorderGradients, gradient)
@@ -432,11 +427,11 @@ local function ApplyTheme(name)
                 })
             else
                 g.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, t.BLACK),
+                    ColorSequenceKeypoint.new(0, t.DARK),
                     ColorSequenceKeypoint.new(0.32, t.ACCENT),
                     ColorSequenceKeypoint.new(0.50, t.BRIGHT),
                     ColorSequenceKeypoint.new(0.68, t.ACCENT),
-                    ColorSequenceKeypoint.new(1, t.BLACK),
+                    ColorSequenceKeypoint.new(1, t.DARK),
                 })
                 g.Offset = Vector2.zero
             end
@@ -494,7 +489,7 @@ local Window = New("Frame", {
     Name = "Window",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(500, 340),
+    Size = UDim2.fromOffset(500, 365),
     BackgroundColor3 = BLACK,
     BackgroundTransparency = 0.16,
     BorderSizePixel = 0,
@@ -529,7 +524,7 @@ Corner(GlassHighlight, 12)
 
 local Header = New("Frame", {
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.new(1, 0, 0, 46),
+    Size = UDim2.new(1, 0, 0, 48),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.18,
     BorderSizePixel = 0,
@@ -559,7 +554,7 @@ local Title = New("TextLabel", {
     BackgroundTransparency = 1,
     Font = BOLD,
     Text = "SAIKI EMOTES",
-    TextSize = 14,
+    TextSize = 13,
     TextXAlignment = Enum.TextXAlignment.Left,
     TextColor3 = WHITE,
     ZIndex = 7,
@@ -572,7 +567,7 @@ local Subtitle = New("TextLabel", {
     BackgroundTransparency = 1,
     Font = FONT,
     Text = "ROBLOX EMOTE CATALOG",
-    TextSize = 7,
+    TextSize = 7.5,
     TextXAlignment = Enum.TextXAlignment.Left,
     TextColor3 = MUTED,
     ZIndex = 7,
@@ -580,7 +575,7 @@ local Subtitle = New("TextLabel", {
 
 local ThemeButton = New("TextButton", {
     Name = "ThemeButton",
-    Position = UDim2.new(1, -82, 0.5, -16),
+    Position = UDim2.new(1, -86, 0.5, -16),
     Size = UDim2.fromOffset(32, 32),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.05,
@@ -617,8 +612,8 @@ Stroke(AnchorButton, DARK_RED, 2)
 --============================================================
 
 local SearchHolder = New("Frame", {
-    Position = UDim2.fromOffset(10, 51),
-    Size = UDim2.new(1, -20, 0, 26),
+    Position = UDim2.fromOffset(10, 56),
+    Size = UDim2.new(1, -20, 0, 30),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.28,
     BorderSizePixel = 0,
@@ -629,18 +624,18 @@ Stroke(SearchHolder, GLASS_HIGHLIGHT, 1)
 
 New("TextLabel", {
     Position = UDim2.fromOffset(9, 0),
-    Size = UDim2.fromOffset(20, 28),
+    Size = UDim2.fromOffset(22, 30),
     BackgroundTransparency = 1,
     Font = BOLD,
     Text = "⌕",
-    TextSize = 18,
+    TextSize = 16,
     TextColor3 = MUTED,
     ZIndex = 6,
 }, SearchHolder)
 
 local Search = New("TextBox", {
-    Position = UDim2.fromOffset(29, 0),
-    Size = UDim2.new(1, -38, 1, 0),
+    Position = UDim2.fromOffset(31, 0),
+    Size = UDim2.new(1, -40, 1, 0),
     BackgroundTransparency = 1,
     ClearTextOnFocus = false,
     Font = FONT,
@@ -658,11 +653,11 @@ local Search = New("TextBox", {
 --============================================================
 
 local GridHolder = New("ScrollingFrame", {
-    Position = UDim2.fromOffset(10, 80),
-    Size = UDim2.new(1, -20, 0, 216),
+    Position = UDim2.fromOffset(10, 90),
+    Size = UDim2.new(1, -20, 0, 235),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
-    CanvasSize = UDim2.fromOffset(480, 225),
+    CanvasSize = UDim2.fromOffset(480, 232),
     ScrollBarThickness = 3,
     ScrollBarImageColor3 = RED,
     ScrollingDirection = Enum.ScrollingDirection.Y,
@@ -672,14 +667,14 @@ local GridHolder = New("ScrollingFrame", {
 local Grid = New("Frame", {
     Name = "EmoteGrid",
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.fromOffset(480, 198),
+    Size = UDim2.fromOffset(480, 204),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     ZIndex = 4,
 }, GridHolder)
 
 local GridLayout = New("UIGridLayout", {
-    CellSize = UDim2.fromOffset(96, 66),
+    CellSize = UDim2.fromOffset(96, 68),
     CellPadding = UDim2.fromOffset(0, 0),
     FillDirection = Enum.FillDirection.Horizontal,
     FillDirectionMaxCells = 5,
@@ -704,8 +699,8 @@ TextGradient(EmptyText)
 -- Pagination is part of the scrolling content, directly after row 3.
 -- It becomes visible naturally when the user scrolls to the bottom of the list.
 local PageArea = New("Frame", {
-    Position = UDim2.fromOffset(0, 198),
-    Size = UDim2.fromOffset(480, 27),
+    Position = UDim2.fromOffset(0, 204),
+    Size = UDim2.fromOffset(480, 28),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     ZIndex = 15,
@@ -713,7 +708,7 @@ local PageArea = New("Frame", {
 
 local PrevPage = New("TextButton", {
     Position = UDim2.fromOffset(0, 1),
-    Size = UDim2.fromOffset(34, 25),
+    Size = UDim2.fromOffset(38, 26),
     BackgroundColor3 = GLASS_2,
     BackgroundTransparency = 0.08,
     BorderSizePixel = 0,
@@ -728,8 +723,8 @@ Corner(PrevPage, 7)
 Stroke(PrevPage, DARK_RED, 1)
 
 local NextPage = New("TextButton", {
-    Position = UDim2.new(1, -34, 0, 1),
-    Size = UDim2.fromOffset(34, 25),
+    Position = UDim2.new(1, -38, 0, 1),
+    Size = UDim2.fromOffset(38, 26),
     BackgroundColor3 = GLASS_2,
     BackgroundTransparency = 0.08,
     BorderSizePixel = 0,
@@ -757,8 +752,8 @@ local PageLabel = New("TextLabel", {
 TextGradient(PageLabel)
 
 local Tabs = New("Frame", {
-    Position = UDim2.new(0, 0, 1, -38),
-    Size = UDim2.new(1, 0, 0, 38),
+    Position = UDim2.new(0, 0, 1, -40),
+    Size = UDim2.new(1, 0, 0, 40),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.28,
     BorderSizePixel = 0,
@@ -1549,7 +1544,7 @@ end
 local function CreateCard(emote, order)
     local Card = New("Frame", {
         Name = "EmoteCard",
-        Size = UDim2.fromOffset(94, 64),
+        Size = UDim2.fromOffset(96, 68),
         BackgroundColor3 = BLACK_2,
         BackgroundTransparency = 0.14,
         BorderSizePixel = 0,
@@ -1561,16 +1556,16 @@ local function CreateCard(emote, order)
     local cardStroke = Stroke(Card, DARK_RED, 1)
     local cardGradient = Instance.new("UIGradient")
     cardGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, BLACK),
-        ColorSequenceKeypoint.new(0.5, RED),
-        ColorSequenceKeypoint.new(1, BLACK),
+        ColorSequenceKeypoint.new(0, DARK_RED),
+        ColorSequenceKeypoint.new(0.5, BRIGHT_RED),
+        ColorSequenceKeypoint.new(1, DARK_RED),
     })
     cardGradient.Parent = cardStroke
     table.insert(ThemeBorderGradients, cardGradient)
 
     local Cover = New("ImageButton", {
         Position = UDim2.fromOffset(3, 3),
-        Size = UDim2.fromOffset(90, 39),
+        Size = UDim2.fromOffset(90, 43),
         BackgroundColor3 = GLASS_2,
         BackgroundTransparency = 0.18,
         BorderSizePixel = 0,
@@ -1583,12 +1578,12 @@ local function CreateCard(emote, order)
     Stroke(Cover, GLASS_HIGHLIGHT, 1)
 
     local Name = New("TextLabel", {
-        Position = UDim2.fromOffset(3, 43),
-        Size = UDim2.new(1, -6, 0, 9),
+        Position = UDim2.fromOffset(3, 46),
+        Size = UDim2.new(1, -6, 0, 10),
         BackgroundTransparency = 1,
         Font = BOLD,
         Text = emote.name,
-        TextSize = 7,
+        TextSize = 7.5,
         TextWrapped = false,
         TextTruncate = Enum.TextTruncate.AtEnd,
         TextXAlignment = Enum.TextXAlignment.Center,
@@ -1601,7 +1596,7 @@ local function CreateCard(emote, order)
     local Favorite = New("TextButton", {
         AnchorPoint = Vector2.new(0.5, 0),
         Position = UDim2.new(0.5, 0, 1, -12),
-        Size = UDim2.fromOffset(24, 12),
+        Size = UDim2.fromOffset(24, 11),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         AutoButtonColor = false,
@@ -1763,7 +1758,7 @@ local function RenderCatalogEntries(entries, pageNumber, finished, generation)
     end
 
     GridHolder.CanvasPosition = Vector2.zero
-    GridHolder.CanvasSize = UDim2.fromOffset(450, 222)
+    GridHolder.CanvasSize = UDim2.fromOffset(480, 232)
 
     PageLabel.Text = tostring(pageNumber) .. " / " .. (finished and tostring(pageNumber) or "...")
     PrevPage.Visible = pageNumber > 1
