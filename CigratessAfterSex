@@ -1,5 +1,5 @@
 --//============================================================
---// SAIKI EMOTES - GLASS V5
+--// SAIKI EMOTES - GLASS V5 FIXED
 --//============================================================
 --// Small black/red glassmorphic emote browser.
 --//
@@ -76,6 +76,8 @@ local CurrentPagesObject = nil
 local SearchQuery = ""
 local SearchGeneration = 0
 local PAGE_SIZE = 15
+local CATALOG_PAGE_SIZE = 30
+local CatalogCache = {}
 
 local CurrentEmote = nil
 local CurrentTrack = nil
@@ -403,11 +405,10 @@ local Search = New("TextBox", {
 
 local GridHolder = New("ScrollingFrame", {
     Position = UDim2.fromOffset(10, 78),
-    Size = UDim2.new(1, -20, 1, -114),
+    Size = UDim2.new(1, -20, 0, 184),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
-    CanvasSize = UDim2.fromOffset(0, 0),
-    AutomaticCanvasSize = Enum.AutomaticSize.None,
+    CanvasSize = UDim2.fromOffset(450, 222),
     ScrollBarThickness = 3,
     ScrollBarImageColor3 = RED,
     ScrollingDirection = Enum.ScrollingDirection.Y,
@@ -417,16 +418,14 @@ local GridHolder = New("ScrollingFrame", {
 local Grid = New("Frame", {
     Name = "EmoteGrid",
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.fromOffset(450, 219),
+    Size = UDim2.fromOffset(450, 195),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     ZIndex = 4,
 }, GridHolder)
 
--- 5 columns x 3 rows = exactly 15 emotes per page.
--- There is ZERO horizontal gap between cards.
 local GridLayout = New("UIGridLayout", {
-    CellSize = UDim2.fromOffset(90, 73),
+    CellSize = UDim2.fromOffset(90, 65),
     CellPadding = UDim2.fromOffset(0, 0),
     FillDirection = Enum.FillDirection.Horizontal,
     FillDirectionMaxCells = 5,
@@ -448,11 +447,10 @@ local EmptyText = New("TextLabel", {
 }, GridHolder)
 TextGradient(EmptyText)
 
--- Pagination lives INSIDE the scrolling browser and is positioned
--- directly after the third/final row of the 15-card page.
+-- Pagination is part of the scrollable content, directly below row 3.
 local PageArea = New("Frame", {
-    Position = UDim2.fromOffset(0, 219),
-    Size = UDim2.fromOffset(450, 28),
+    Position = UDim2.fromOffset(0, 195),
+    Size = UDim2.fromOffset(450, 27),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     ZIndex = 15,
@@ -772,14 +770,31 @@ local function BuildCatalogPage(query)
     params.SalesTypeFilter = Enum.SalesTypeFilter.All
     params.AssetTypes = {Enum.AvatarAssetType.EmoteAnimation}
     params.IncludeOffSale = true
-    params.Limit = PAGE_SIZE
+
+    -- Roblox only accepts specific Limit values. 30 is used here
+    -- so the UI can split each catalog page into two 15-emote UI pages.
+    params.Limit = CATALOG_PAGE_SIZE
     params.SortType = Enum.CatalogSortType.Relevance
 
+    -- Keep the GazeOld-compatible call first, then use Roblox's
+    -- current Async API if the deprecated call is unavailable.
     local ok, pages = pcall(function()
         return AvatarEditorService:SearchCatalog(params)
     end)
 
-    if ok then return pages end
+    if ok and pages then
+        return pages
+    end
+
+    local asyncOk, asyncPages = pcall(function()
+        return AvatarEditorService:SearchCatalogAsync(params)
+    end)
+
+    if asyncOk and asyncPages then
+        return asyncPages
+    end
+
+    warn("[Saiki Emotes] Roblox catalog search failed:", tostring(pages), tostring(asyncPages))
     return nil
 end
 
@@ -806,16 +821,12 @@ local function ClearGrid()
             child:Destroy()
         end
     end
-
-    table.clear(ActiveCardGradients)
 end
-
-local ActiveCardGradients = ActiveCardGradients or {}
 
 local function CreateCard(emote, order)
     local Card = New("Frame", {
         Name = "EmoteCard",
-        Size = UDim2.fromOffset(90, 73),
+        Size = UDim2.fromOffset(90, 65),
         BackgroundColor3 = BLACK_2,
         BackgroundTransparency = 0.14,
         BorderSizePixel = 0,
@@ -833,21 +844,9 @@ local function CreateCard(emote, order)
     })
     cardGradient.Parent = cardStroke
 
-    task.spawn(function()
-        while Card.Parent and cardStroke.Parent do
-            local t = TweenService:Create(
-                cardGradient,
-                TweenInfo.new(3.2, Enum.EasingStyle.Linear),
-                {Rotation = cardGradient.Rotation + 360}
-            )
-            t:Play()
-            t.Completed:Wait()
-        end
-    end)
-
     local Cover = New("ImageButton", {
         Position = UDim2.fromOffset(3, 3),
-        Size = UDim2.fromOffset(84, 47),
+        Size = UDim2.fromOffset(84, 39),
         BackgroundColor3 = GLASS_2,
         BackgroundTransparency = 0.18,
         BorderSizePixel = 0,
@@ -860,8 +859,8 @@ local function CreateCard(emote, order)
     Stroke(Cover, Color3.fromRGB(77, 28, 36), 1)
 
     local Name = New("TextLabel", {
-        Position = UDim2.fromOffset(3, 51),
-        Size = UDim2.new(1, -6, 0, 11),
+        Position = UDim2.fromOffset(3, 43),
+        Size = UDim2.new(1, -6, 0, 10),
         BackgroundTransparency = 1,
         Font = BOLD,
         Text = emote.name,
@@ -877,8 +876,8 @@ local function CreateCard(emote, order)
 
     local Favorite = New("TextButton", {
         AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 1, -11),
-        Size = UDim2.fromOffset(24, 11),
+        Position = UDim2.new(0.5, 0, 1, -12),
+        Size = UDim2.fromOffset(24, 12),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         AutoButtonColor = false,
@@ -894,43 +893,12 @@ local function CreateCard(emote, order)
         local active = IsFavorite(emote.id)
         Favorite.Text = active and "★" or "☆"
         Favorite.TextColor3 = active and RED or STAR_OFF
-
-        if CurrentTab == "Favorites" then
-            task.defer(function()
-                RenderFavorites()
-            end)
-        end
     end)
 
     Cover.MouseButton1Click:Connect(function()
         PlayEmote(emote)
     end)
 end
-
--- One animation loop for every visible card instead of 15 separate
--- TweenService loops. This keeps page changes much lighter.
-task.spawn(function()
-    while MainGui.Parent do
-        local count = #ActiveCardGradients
-        if count > 0 then
-            for i = count, 1, -1 do
-                local gradient = ActiveCardGradients[i]
-                if gradient and gradient.Parent then
-                    gradient.Rotation = (gradient.Rotation + 2.5) % 360
-                else
-                    table.remove(ActiveCardGradients, i)
-                end
-            end
-            task.wait(0.03)
-        else
-            task.wait(0.10)
-        end
-    end
-end)
-
---============================================================
--- FAVORITES RENDER
---============================================================
 
 function RenderFavorites()
     ClearGrid()
@@ -949,43 +917,95 @@ function RenderFavorites()
     if #list == 0 then
         EmptyText.Text = (#Favorites == 0)
             and "No favorite emotes yet.\nStar an emote in the EMOTES tab."
-            or "Your favorites are not loaded on this page yet.\nOpen the EMOTES tab and favorite them again if needed."
+            or "Your favorites are not loaded in this session yet."
         EmptyText.Visible = true
     else
         for i, emote in ipairs(list) do
+            if i > PAGE_SIZE then break end
             CreateCard(emote, i)
         end
     end
 
+    GridHolder.CanvasPosition = Vector2.zero
     PageLabel.Text = "FAVORITES"
     PrevPage.Visible = false
     NextPage.Visible = false
 end
 
---============================================================
--- CATALOG RENDER
---============================================================
-
-local CatalogCache = {}
-local ActiveQuery = ""
-
-local function EntriesFromPage(pages)
-    local entries = Safe(function()
-        return pages:GetCurrentPage()
+-- Each Roblox catalog page contains 30 results. We expose those
+-- as two lightweight UI pages of exactly 15 results each.
+local function ReadCatalogPage(cache)
+    local raw = Safe(function()
+        return cache.pages:GetCurrentPage()
     end)
 
-    if type(entries) ~= "table" then
+    if type(raw) ~= "table" then
         return {}
     end
 
-    local converted = {}
-    for _, entry in ipairs(entries) do
+    local entries = {}
+    for _, entry in ipairs(raw) do
         local emote = ConvertCatalogEntry(entry)
         if emote then
-            table.insert(converted, emote)
+            table.insert(entries, emote)
         end
     end
-    return converted
+
+    cache.catalogEntries[cache.catalogPage] = entries
+    local finished = false
+    pcall(function() finished = cache.pages.IsFinished end)
+    cache.catalogFinished[cache.catalogPage] = finished
+    return entries
+end
+
+local function GetUIPageEntries(cache, uiPage)
+    local catalogPage = math.floor((uiPage - 1) / 2) + 1
+    local half = ((uiPage - 1) % 2) + 1
+
+    while cache.catalogPage < catalogPage do
+        if cache.catalogFinished[cache.catalogPage] then
+            return {}, true
+        end
+
+        while cache.advancing do
+            task.wait(0.02)
+        end
+
+        if cache.catalogPage >= catalogPage then
+            break
+        end
+
+        cache.advancing = true
+        local ok = pcall(function()
+            cache.pages:AdvanceToNextPageAsync()
+        end)
+        cache.advancing = false
+
+        if not ok then
+            return {}, true
+        end
+
+        cache.catalogPage += 1
+        ReadCatalogPage(cache)
+    end
+
+    local entries = cache.catalogEntries[catalogPage] or {}
+    local fromIndex = half == 1 and 1 or 16
+    local toIndex = half == 1 and 15 or 30
+
+    local result = {}
+    for i = fromIndex, math.min(toIndex, #entries) do
+        table.insert(result, entries[i])
+    end
+
+    local finished = false
+    if half == 2 then
+        finished = cache.catalogFinished[catalogPage] == true
+    else
+        finished = cache.catalogFinished[catalogPage] == true and #entries <= 15
+    end
+
+    return result, finished
 end
 
 local function RenderCatalogEntries(entries, pageNumber, finished, generation)
@@ -1006,74 +1026,18 @@ local function RenderCatalogEntries(entries, pageNumber, finished, generation)
         EmptyText.Visible = true
     end
 
-    -- 15 cards = 3 rows * 73px. Pagination is directly underneath.
-    Grid.Size = UDim2.fromOffset(450, 219)
-    PageArea.Position = UDim2.fromOffset(0, 219)
-    PageArea.Visible = true
-
-    GridHolder.CanvasSize = UDim2.fromOffset(450, 247)
     GridHolder.CanvasPosition = Vector2.zero
+    GridHolder.CanvasSize = UDim2.fromOffset(450, 222)
 
     PageLabel.Text = tostring(pageNumber) .. " / " .. (finished and tostring(pageNumber) or "...")
     PrevPage.Visible = pageNumber > 1
     NextPage.Visible = not finished
 end
 
-local function PrefetchNextPage(cache)
-    if not cache or cache.prefetching then return end
-
-    local finished = false
-    pcall(function() finished = cache.pages.IsFinished end)
-    if finished then return end
-
-    local nextPage = cache.highestLoaded + 1
-    if cache.entries[nextPage] then return end
-
-    cache.prefetching = true
-
-    task.spawn(function()
-        local ok = pcall(function()
-            cache.pages:AdvanceToNextPageAsync()
-        end)
-
-        if ok then
-            local entries = EntriesFromPage(cache.pages)
-            local page = cache.highestLoaded + 1
-            cache.entries[page] = entries
-
-            local nowFinished = false
-            pcall(function() nowFinished = cache.pages.IsFinished end)
-            cache.finished[page] = nowFinished
-            cache.highestLoaded = page
-        end
-
-        cache.prefetching = false
-    end)
-end
-
 local function LoadCatalogPage(pageNumber)
     SearchGeneration += 1
     local generation = SearchGeneration
-
     pageNumber = math.max(1, tonumber(pageNumber) or 1)
-
-    local cache = CatalogCache[SearchQuery]
-
-    -- Already fetched: render immediately with NO catalog request.
-    if cache and cache.entries[pageNumber] then
-        CurrentPagesObject = cache.pages
-        CurrentPage = pageNumber
-        StatusText.Text = "CATALOG"
-        StatusDot.BackgroundColor3 = GREEN
-
-        RenderCatalogEntries(
-            cache.entries[pageNumber],
-            pageNumber,
-            cache.finished[pageNumber] == true,
-            generation
-        )
-        return
-    end
 
     StatusText.Text = "LOADING"
     StatusDot.BackgroundColor3 = Color3.fromRGB(255, 190, 65)
@@ -1081,103 +1045,70 @@ local function LoadCatalogPage(pageNumber)
     ClearGrid()
     PageLabel.Text = "LOADING"
 
+    local cache = CatalogCache[SearchQuery]
+    if not cache then
+        cache = {
+            pages = nil,
+            catalogPage = 0,
+            catalogEntries = {},
+            catalogFinished = {},
+            uiPages = {},
+            uiFinished = {},
+            advancing = false,
+        }
+        CatalogCache[SearchQuery] = cache
+    end
+
+    -- Cached UI page: instant render.
+    if cache.uiPages[pageNumber] then
+        CurrentPage = pageNumber
+        StatusText.Text = "CATALOG"
+        StatusDot.BackgroundColor3 = GREEN
+        RenderCatalogEntries(cache.uiPages[pageNumber], pageNumber, cache.uiFinished[pageNumber], generation)
+        return
+    end
+
     task.spawn(function()
-        -- New search: obtain page 1 once.
-        if not cache then
+        -- Only the first UI page performs the actual catalog search.
+        if not cache.pages then
             local pages = BuildCatalogPage(SearchQuery)
-            if not pages or generation ~= SearchGeneration or CurrentTab ~= "Emotes" then
+            if not pages then
                 if generation == SearchGeneration then
                     StatusText.Text = "ERROR"
                     StatusDot.BackgroundColor3 = RED
                     EmptyText.Text = "Roblox catalog search failed."
                     EmptyText.Visible = true
+                    PageLabel.Text = "ERROR"
                 end
                 return
             end
 
-            cache = {
-                pages = pages,
-                entries = {},
-                finished = {},
-                highestLoaded = 0,
-            }
-            CatalogCache[SearchQuery] = cache
+            cache.pages = pages
+            cache.catalogPage = 1
+            ReadCatalogPage(cache)
         end
 
-        -- If page 1 hasn't been stored yet, read it now.
-        if not cache.entries[1] then
-            local firstEntries = EntriesFromPage(cache.pages)
-            local finished = false
-            pcall(function() finished = cache.pages.IsFinished end)
-
-            cache.entries[1] = firstEntries
-            cache.finished[1] = finished
-            cache.highestLoaded = 1
-        end
-
-        -- Advance only as far as the requested page. Each newly
-        -- requested page is cached, so returning to it is instant.
-        while cache.highestLoaded < pageNumber do
-            if generation ~= SearchGeneration or CurrentTab ~= "Emotes" then return end
-
-            -- If the background prefetch is already fetching the next
-            -- page, wait for it instead of issuing a second request.
-            while cache.prefetching do
-                if generation ~= SearchGeneration or CurrentTab ~= "Emotes" then return end
-                task.wait(0.02)
-            end
-
-            if cache.highestLoaded >= pageNumber then
-                break
-            end
-
-            local finished = false
-            pcall(function() finished = cache.pages.IsFinished end)
-            if finished then
-                break
-            end
-
-            local ok = pcall(function()
-                cache.pages:AdvanceToNextPageAsync()
-            end)
-            if not ok then
-                break
-            end
-
-            local newPage = cache.highestLoaded + 1
-            cache.entries[newPage] = EntriesFromPage(cache.pages)
-
-            local newFinished = false
-            pcall(function() newFinished = cache.pages.IsFinished end)
-            cache.finished[newPage] = newFinished
-            cache.highestLoaded = newPage
-        end
-
+        local entries, finished = GetUIPageEntries(cache, pageNumber)
         if generation ~= SearchGeneration or CurrentTab ~= "Emotes" then return end
 
-        local entries = cache.entries[pageNumber]
-        if not entries then
-            entries = cache.entries[cache.highestLoaded] or {}
-            pageNumber = cache.highestLoaded
-        end
+        cache.uiPages[pageNumber] = entries
+        cache.uiFinished[pageNumber] = finished
 
         CurrentPagesObject = cache.pages
         CurrentPage = pageNumber
         StatusText.Text = "CATALOG"
         StatusDot.BackgroundColor3 = GREEN
+        RenderCatalogEntries(entries, pageNumber, finished, generation)
 
-        RenderCatalogEntries(
-            entries,
-            pageNumber,
-            cache.finished[pageNumber] == true,
-            generation
-        )
-
-        -- Warm the next page in the background so clicking NEXT
-        -- normally renders from memory instead of waiting for Roblox
-        -- catalog pagination.
-        if not cache.finished[pageNumber] then
-            PrefetchNextPage(cache)
+        -- Prefetch the next 15-item UI page. If it is the second
+        -- half of the same 30-result Roblox page, this costs nothing.
+        local nextPage = pageNumber + 1
+        if not cache.uiPages[nextPage] and not finished then
+            task.spawn(function()
+                local nextEntries, nextFinished = GetUIPageEntries(cache, nextPage)
+                cache.uiPages[nextPage] = nextEntries
+                cache.uiFinished[nextPage] = nextFinished
+            end)
         end
     end)
 end
@@ -1185,13 +1116,7 @@ end
 local function NewSearch()
     CurrentPage = 1
     SearchQuery = Search.Text or ""
-    ActiveQuery = SearchQuery
-
-    -- A new search gets its own cache; existing searches remain cached.
-    if not CatalogCache[SearchQuery] then
-        CatalogCache[SearchQuery] = nil
-    end
-
+    CatalogCache[SearchQuery] = nil
     if CurrentTab == "Emotes" then
         LoadCatalogPage(1)
     end
@@ -1229,18 +1154,11 @@ TabFavorites.MouseButton1Click:Connect(function()
     SelectTab("Favorites")
 end)
 
-local SearchToken = 0
-
 Search.FocusLost:Connect(function(enterPressed)
     if enterPressed or CurrentTab == "Emotes" then
-        SearchToken += 1
-        local token = SearchToken
-        task.delay(0.12, function()
-            if token ~= SearchToken then return end
-            SearchQuery = Search.Text or ""
-            CurrentPage = 1
-            LoadCatalogPage(1)
-        end)
+        SearchQuery = Search.Text or ""
+        CurrentPage = 1
+        LoadCatalogPage(1)
     end
 end)
 
