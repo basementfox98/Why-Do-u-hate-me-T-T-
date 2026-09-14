@@ -2543,8 +2543,10 @@ local FavoriteCards = {}
 local RecentCards = {}
 local renderSerial = 0
 local renderFavorites
+local renderRecent
 
 local function clearCardTable(tbl)
+    if type(tbl) ~= "table" then return end
     for _,card in pairs(tbl) do
         if card and card.Parent then
             card:Destroy()
@@ -2554,6 +2556,8 @@ local function clearCardTable(tbl)
 end
 
 local function createEmoteCard(item, parent, cardTable, isRecentCard)
+    if type(cardTable) ~= "table" then return nil end
+    if not parent then return nil end
     local id = numericId(item.Id or item.id or item.AssetId or item.assetId)
     if not id then return end
 
@@ -2697,10 +2701,10 @@ local function createEmoteCard(item, parent, cardTable, isRecentCard)
     end)
 
     table.insert(cardTable,card)
+    return card
 end
 
--- renderFavorites is forward-declared above createEmoteCard.
-local renderRecent
+-- renderFavorites/renderRecent are forward-declared above createEmoteCard.
 
 --==============================================================
 -- CATALOG RENDER / PAGINATION
@@ -3627,16 +3631,9 @@ print("[SAIKI EMOTES] Gaze Edition loaded.")
         msg.Text="LOAD ERROR\nloadstring/load is unavailable in this executor."
         return
     end
-    local ok,chunk,compileErr = pcall(loader,source)
-    if not ok then
-        msg.Text="COMPILE CALL ERROR\n" .. tostring(chunk)
-        warn("[SAIKI EMOTES] compiler call error: " .. tostring(chunk))
-        return
-    end
-    if type(chunk) ~= "function" then
-        local detail = compileErr or chunk or "unknown compiler error"
-        msg.Text="COMPILE ERROR\n" .. tostring(detail)
-        warn("[SAIKI EMOTES] compile error: " .. tostring(detail))
+    local ok,chunk = pcall(loader,source)
+    if not ok or type(chunk) ~= "function" then
+        msg.Text="COMPILE ERROR\n" .. tostring(chunk)
         return
     end
     local ran,err = xpcall(chunk,function(e) return debug and debug.traceback and debug.traceback(tostring(e),2) or tostring(e) end)
