@@ -504,6 +504,7 @@ local MainGui = New("ScreenGui", {
     ResetOnSpawn = false,
     IgnoreGuiInset = true,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    DisplayOrder = 20,
 }, PlayerGui)
 
 --============================================================
@@ -520,7 +521,7 @@ local AmbientLayer = New("Frame", {
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     Active = false,
-    ZIndex = 1,
+    ZIndex = 0,
 }, MainGui)
 
 local AmbientObjects = {}
@@ -544,7 +545,7 @@ local function ClearAmbient()
     table.clear(AmbientObjects)
 end
 
-local function AddFallingParticle(image, name, sizeMin, sizeMax, speedMin, speedMax, swayMin, swayMax, rotMin, rotMax, transparencyMin, transparencyMax)
+local function AddFallingParticle(image, name, assetId, sizeMin, sizeMax, speedMin, speedMax, swayMin, swayMax, rotMin, rotMax, transparencyMin, transparencyMax)
     local obj = New("ImageLabel", {
         Name = name,
         AnchorPoint = Vector2.new(0.5, 0.5),
@@ -553,10 +554,12 @@ local function AddFallingParticle(image, name, sizeMin, sizeMax, speedMin, speed
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         Image = image,
+        ScaleType = Enum.ScaleType.Fit,
         ImageTransparency = AmbientRandom:NextNumber(transparencyMin, transparencyMax),
         Rotation = AmbientRandom:NextNumber(0, 360),
         ZIndex = 1,
     }, AmbientLayer)
+    obj:SetAttribute("AssetId", tostring(assetId))
     obj:SetAttribute("X", obj.Position.X.Scale)
     obj:SetAttribute("Y", obj.Position.Y.Scale)
     obj:SetAttribute("Speed", AmbientRandom:NextNumber(speedMin, speedMax))
@@ -565,24 +568,34 @@ local function AddFallingParticle(image, name, sizeMin, sizeMax, speedMin, speed
     obj:SetAttribute("Phase", AmbientRandom:NextNumber(0, math.pi * 2))
     obj:SetAttribute("RotSpeed", AmbientRandom:NextNumber(rotMin, rotMax))
     AmbientObjects[#AmbientObjects + 1] = obj
+    -- Some executors/clients fail to render catalog thumbnails in ImageLabels.
+    -- Fall back to the asset content id if the thumbnail does not load.
+    task.delay(0.6, function()
+        if obj and obj.Parent and not obj.IsLoaded then
+            local id = obj:GetAttribute("AssetId")
+            if id then obj.Image = "rbxassetid://" .. id end
+        end
+    end)
 end
 
 local function BuildSnow()
     -- Original Saiki Music uses 24 particles; this version is deliberately denser.
-    for i = 1, 58 do
+    for i = 1, 70 do
         AddFallingParticle(
             SNOW_FLAKES[((i - 1) % #SNOW_FLAKES) + 1], "Snow_" .. i,
-            10, 24, 0.055, 0.13, 0.008, 0.024, -18, 18, 0.10, 0.34
+            (i % 2 == 0) and 138994720 or 103375221051022,
+            10, 24, 0.055, 0.13, 0.008, 0.024, -18, 18, 0.08, 0.30
         )
     end
 end
 
 local function BuildCherry()
     -- Same asset family and motion ranges as the original Saiki Music cherry effect.
-    for i = 1, 42 do
+    for i = 1, 48 do
         AddFallingParticle(
             CHERRY_LEAVES[((i - 1) % #CHERRY_LEAVES) + 1], "CherryLeaf_" .. i,
-            14, 30, 0.045, 0.095, 0.012, 0.035, -75, 75, 0.05, 0.22
+            ({[1]=138495845541885,[2]=98467848507036,[3]=125300690495092})[((i - 1) % 3) + 1],
+            14, 30, 0.045, 0.095, 0.012, 0.035, -75, 75, 0.04, 0.20
         )
     end
 end
@@ -617,6 +630,7 @@ end
 
 local function BuildAmbientForTheme()
     ClearAmbient()
+    -- 0/1 Matrix rain exists ONLY in Hacker.
     if CurrentThemeName == "Snow" then
         BuildSnow()
     elseif CurrentThemeName == "Lovely" then
@@ -872,9 +886,9 @@ New("TextLabel", {
     Position = UDim2.fromOffset(9, 0),
     Size = UDim2.fromOffset(22, 30),
     BackgroundTransparency = 1,
-    Font = BOLD,
+    Font = Enum.Font.SourceSansBold,
     Text = "🔎",
-    TextSize = 14,
+    TextSize = 16,
     TextColor3 = MUTED,
     ZIndex = 6,
 }, SearchHolder)
