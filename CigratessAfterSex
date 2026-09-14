@@ -363,8 +363,8 @@ local Subtitle = New("TextLabel", {
 
 local AnchorButton = New("TextButton", {
     Name = "AnchorButton",
-    Position = UDim2.new(1, -67, 0.5, -12),
-    Size = UDim2.fromOffset(57, 24),
+    Position = UDim2.new(1, -42, 0.5, -15),
+    Size = UDim2.fromOffset(30, 30),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.05,
     BorderSizePixel = 0,
@@ -375,8 +375,8 @@ local AnchorButton = New("TextButton", {
     TextColor3 = WHITE,
     ZIndex = 8,
 }, Header)
-Corner(AnchorButton, 6)
-Stroke(AnchorButton, Color3.fromRGB(75, 30, 40), 1)
+Corner(AnchorButton, 15)
+Stroke(AnchorButton, Color3.fromRGB(75, 30, 40), 2)
 
 --============================================================
 -- SEARCH
@@ -1827,14 +1827,24 @@ local Toggle = New("TextButton", {
     BorderSizePixel = 0,
     AutoButtonColor = false,
     Font = BOLD,
-    Text = "S",
+    Text = "",
     TextSize = 17,
     TextColor3 = WHITE,
     ZIndex = 100,
 }, ToggleGui)
 Corner(Toggle, 11)
-MovingBorder(Toggle, 1.5)
-TextGradient(Toggle)
+Stroke(Toggle, Color3.fromRGB(90, 90, 90), 2.5)
+
+local ToggleImage = New("ImageLabel", {
+    Name = "SaikiBrandImage",
+    Position = UDim2.fromOffset(2, 2),
+    Size = UDim2.new(1, -4, 1, -4),
+    BackgroundTransparency = 1,
+    Image = "https://raw.githubusercontent.com/SaikiWithTheBanHammer/ScriptBlox/main/SaikiBlackandWhite.jpg",
+    ScaleType = Enum.ScaleType.Fit,
+    ZIndex = 101,
+}, Toggle)
+Corner(ToggleImage, 9)
 
 local toggleDragging = false
 local toggleMoved = false
