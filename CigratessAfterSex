@@ -1,23 +1,23 @@
 --//============================================================
---// SAIKI EMOTES
---// Clean emote browser inspired by the useful visual/function ideas
---// of VEX EMOTES, rebuilt with a different layout.
+--// SAIKI EMOTES - GLASS V3
+--//============================================================
+--// Small black/red glassmorphic emote browser.
 --//
---// Layout:
---//   • Emote cards with real Roblox asset thumbnails
---//   • Name + favorite button only on each card
---//   • Emotes / Favorites tabs are horizontal at the bottom
---//   • Search bar
---//   • Lightweight pagination for large emote databases
---//   • Emote Control HUD belongs to the main GUI
---//   • Separate draggable SAIKI hide/show button
---//   • Animated black/red gradient border
---//   • White → red gradient text
---//   • English only
---//============================================================
-
---//============================================================
---// SERVICES
+--// EMOTES tab:
+--//   • Roblox Avatar Editor emote catalog (not ownership-limited)
+--//   • 10 emotes per page / 10 cards visible at once
+--//   • Real Roblox asset thumbnails
+--//   • Name + favorite star only
+--//   • Search + next/previous catalog pages
+--//
+--// FAVORITES tab:
+--//   • Favorites saved locally when executor file APIs are available
+--//
+--// HUD:
+--//   • Part of the main GUI, so it hides with the GUI
+--//
+--// Toggle:
+--//   • Separate draggable S button
 --//============================================================
 
 local Players = game:GetService("Players")
@@ -25,167 +25,206 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
+local AvatarEditorService = game:GetService("AvatarEditorService")
 
 local Player = Players.LocalPlayer
-if not Player then
-    return
-end
-
+if not Player then return end
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
---//============================================================
---// CLEAN PREVIOUS VERSION
---//============================================================
-
-for _, guiName in ipairs({"SaikiEmotesGUI", "SaikiEmotesToggle"}) do
-    local old = PlayerGui:FindFirstChild(guiName)
-    if old then
-        old:Destroy()
-    end
+for _, name in ipairs({"SaikiEmotesGUI", "SaikiEmotesToggle"}) do
+    local old = PlayerGui:FindFirstChild(name)
+    if old then old:Destroy() end
 end
 
---//============================================================
---// THEME
---//============================================================
+--============================================================
+-- THEME
+--============================================================
 
-local THEME_RED = Color3.fromRGB(255, 48, 66)
-local BRIGHT_RED = Color3.fromRGB(255, 25, 48)
-local DARK_RED = Color3.fromRGB(88, 10, 18)
-local BLACK = Color3.fromRGB(7, 7, 10)
-local BLACK_2 = Color3.fromRGB(13, 11, 14)
-local PANEL = Color3.fromRGB(22, 13, 17)
-local PANEL_2 = Color3.fromRGB(30, 16, 21)
-local PANEL_3 = Color3.fromRGB(38, 18, 24)
-local WHITE = Color3.fromRGB(255, 255, 255)
-local SOFT_WHITE = Color3.fromRGB(226, 226, 231)
-local MUTED = Color3.fromRGB(150, 143, 149)
-local STAR_OFF = Color3.fromRGB(175, 175, 181)
+local BLACK = Color3.fromRGB(5, 5, 7)
+local BLACK_2 = Color3.fromRGB(10, 8, 11)
+local GLASS = Color3.fromRGB(24, 14, 18)
+local GLASS_2 = Color3.fromRGB(35, 16, 21)
+local RED = Color3.fromRGB(235, 42, 62)
+local BRIGHT_RED = Color3.fromRGB(255, 58, 78)
+local DARK_RED = Color3.fromRGB(92, 18, 29)
+local WHITE = Color3.fromRGB(250, 247, 249)
+local SOFT_WHITE = Color3.fromRGB(222, 218, 221)
+local MUTED = Color3.fromRGB(150, 140, 145)
+local STAR_OFF = Color3.fromRGB(125, 117, 122)
+local GREEN = Color3.fromRGB(70, 220, 125)
 
 local FONT = Enum.Font.Gotham
-local FONT_BOLD = Enum.Font.GothamBold
+local BOLD = Enum.Font.GothamBold
 
---//============================================================
---// SETTINGS
---//============================================================
+--============================================================
+-- SETTINGS / STATE
+--============================================================
 
 local Settings = {
     Speed = 1,
-    Loop = true,
-    ShowHUD = true,
+    Looped = true,
     StopOnMovement = false,
 }
 
---//============================================================
---// EMOTE DATA
---//============================================================
-
--- The full database is loaded from the same VEX emotes endpoint.
--- No small fake fallback list is used when the database is unavailable.
-
-local Emotes = {}
 local Favorites = {}
 local FavoritesSet = {}
+local KnownEmotes = {}
 
 local CurrentTab = "Emotes"
 local CurrentPage = 1
-local PAGE_SIZE = 20
+local CurrentPagesObject = nil
+local SearchQuery = ""
+local SearchGeneration = 0
+local PAGE_SIZE = 10
 
 local CurrentEmote = nil
 local CurrentTrack = nil
 local CurrentAnimation = nil
-local HeartbeatConnection = nil
+local TrackConnection = nil
 
---//============================================================
---// GUI HELPERS
---//============================================================
+local SAVE_FILE = "SaikiEmotes_Favorites.json"
+
+--============================================================
+-- HELPERS
+--============================================================
 
 local function New(className, props, parent)
     local object = Instance.new(className)
-
-    for property, value in pairs(props or {}) do
-        object[property] = value
-    end
-
-    if parent then
-        object.Parent = parent
-    end
-
+    for k, v in pairs(props or {}) do object[k] = v end
+    if parent then object.Parent = parent end
     return object
 end
 
-local function AddCorner(parent, radius)
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, radius or 8)
-    corner.Parent = parent
-    return corner
+local function Corner(object, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 8)
+    c.Parent = object
+    return c
 end
 
-local function AddStroke(parent, color, thickness)
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = color or DARK_RED
-    stroke.Thickness = thickness or 1
-    stroke.Parent = parent
-    return stroke
+local function Stroke(object, color, thickness)
+    local s = Instance.new("UIStroke")
+    s.Color = color or DARK_RED
+    s.Thickness = thickness or 1
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = object
+    return s
 end
 
-local function AddTextGradient(label)
-    local gradient = Instance.new("UIGradient")
-    gradient.Color = ColorSequence.new({
+local function TextGradient(object)
+    local g = Instance.new("UIGradient")
+    g.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, WHITE),
-        ColorSequenceKeypoint.new(0.48, SOFT_WHITE),
-        ColorSequenceKeypoint.new(1, THEME_RED),
+        ColorSequenceKeypoint.new(0.52, SOFT_WHITE),
+        ColorSequenceKeypoint.new(1, RED),
     })
-    gradient.Rotation = 0
-    gradient.Parent = label
-    return gradient
+    g.Parent = object
+    return g
 end
 
-local function AddMovingBorder(parent, thickness)
-    local stroke = AddStroke(parent, WHITE, thickness or 1.5)
-
+local function MovingBorder(object, thickness)
+    local stroke = Stroke(object, RED, thickness or 1.5)
     local gradient = Instance.new("UIGradient")
     gradient.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, BLACK),
-        ColorSequenceKeypoint.new(0.28, BRIGHT_RED),
+        ColorSequenceKeypoint.new(0.30, BRIGHT_RED),
         ColorSequenceKeypoint.new(0.50, BLACK),
         ColorSequenceKeypoint.new(0.72, BRIGHT_RED),
         ColorSequenceKeypoint.new(1, BLACK),
     })
-    gradient.Rotation = 0
     gradient.Parent = stroke
 
     task.spawn(function()
-        while stroke.Parent and gradient.Parent do
+        while object.Parent and stroke.Parent do
             local tween = TweenService:Create(
                 gradient,
-                TweenInfo.new(2.8, Enum.EasingStyle.Linear),
+                TweenInfo.new(2.5, Enum.EasingStyle.Linear),
                 {Rotation = gradient.Rotation + 360}
             )
             tween:Play()
             tween.Completed:Wait()
         end
     end)
-
     return stroke
 end
 
-local function SetTextGradient(label)
-    if not label:FindFirstChildOfClass("UIGradient") then
-        AddTextGradient(label)
-    end
-end
-
-local function SafeCall(fn, ...)
+local function Safe(fn, ...)
     local ok, result = pcall(fn, ...)
-    if ok then
-        return result
-    end
+    if ok then return result end
     return nil
 end
 
---//============================================================
---// ROOT GUIS
---//============================================================
+local function AssetId(value)
+    return tonumber(tostring(value):match("%d+"))
+end
+
+local function Thumbnail(id)
+    return "rbxthumb://type=Asset&id=" .. tostring(id) .. "&w=420&h=420"
+end
+
+--============================================================
+-- LOCAL FAVORITES
+--============================================================
+
+local function LoadFavorites()
+    Favorites = {}
+    FavoritesSet = {}
+
+    local ok, data = pcall(function()
+        if readfile and isfile and isfile(SAVE_FILE) then
+            return HttpService:JSONDecode(readfile(SAVE_FILE))
+        end
+        return {}
+    end)
+
+    if not ok or type(data) ~= "table" then return end
+
+    for _, id in ipairs(data) do
+        id = tonumber(id)
+        if id and not FavoritesSet[id] then
+            FavoritesSet[id] = true
+            table.insert(Favorites, id)
+        end
+    end
+end
+
+local function SaveFavorites()
+    pcall(function()
+        if writefile then
+            writefile(SAVE_FILE, HttpService:JSONEncode(Favorites))
+        end
+    end)
+end
+
+LoadFavorites()
+
+local function IsFavorite(id)
+    return FavoritesSet[id] == true
+end
+
+local function ToggleFavorite(id)
+    id = tonumber(id)
+    if not id then return end
+
+    if IsFavorite(id) then
+        FavoritesSet[id] = nil
+        for i, value in ipairs(Favorites) do
+            if value == id then
+                table.remove(Favorites, i)
+                break
+            end
+        end
+    else
+        FavoritesSet[id] = true
+        table.insert(Favorites, id)
+    end
+
+    SaveFavorites()
+end
+
+--============================================================
+-- GUI ROOT
+--============================================================
 
 local MainGui = New("ScreenGui", {
     Name = "SaikiEmotesGUI",
@@ -201,167 +240,174 @@ local ToggleGui = New("ScreenGui", {
     ZIndexBehavior = Enum.ZIndexBehavior.Global,
 }, PlayerGui)
 
---//============================================================
---// MAIN WINDOW
---//============================================================
+--============================================================
+-- MAIN WINDOW: SMALL GLASS
+--============================================================
 
 local Window = New("Frame", {
     Name = "Window",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(600, 410),
+    Size = UDim2.fromOffset(500, 340),
     BackgroundColor3 = BLACK,
-    BackgroundTransparency = 0.06,
+    BackgroundTransparency = 0.16,
     BorderSizePixel = 0,
     ClipsDescendants = false,
 }, MainGui)
+Corner(Window, 16)
+MovingBorder(Window, 2)
 
-AddCorner(Window, 16)
-AddMovingBorder(Window, 2)
-
--- soft inner panel
-local Inner = New("Frame", {
+local Glass = New("Frame", {
     Position = UDim2.fromOffset(3, 3),
     Size = UDim2.new(1, -6, 1, -6),
-    BackgroundColor3 = PANEL,
-    BackgroundTransparency = 0.14,
+    BackgroundColor3 = GLASS,
+    BackgroundTransparency = 0.20,
     BorderSizePixel = 0,
     ClipsDescendants = true,
 }, Window)
+Corner(Glass, 13)
 
-AddCorner(Inner, 13)
+-- subtle glass highlight
+local GlassHighlight = New("Frame", {
+    Position = UDim2.fromOffset(1, 1),
+    Size = UDim2.new(1, -2, 0, 54),
+    BackgroundColor3 = Color3.fromRGB(70, 42, 47),
+    BackgroundTransparency = 0.78,
+    BorderSizePixel = 0,
+}, Glass)
+Corner(GlassHighlight, 12)
 
---//============================================================
---// HEADER
---//============================================================
+--============================================================
+-- HEADER
+--============================================================
 
 local Header = New("Frame", {
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.new(1, 0, 0, 50),
+    Size = UDim2.new(1, 0, 0, 44),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.18,
     BorderSizePixel = 0,
-}, Inner)
+    ZIndex = 5,
+}, Glass)
 
 local HeaderAccent = New("Frame", {
-    Position = UDim2.fromOffset(0, 48),
-    Size = UDim2.new(1, 0, 0, 2),
-    BackgroundColor3 = THEME_RED,
+    Position = UDim2.new(0, 0, 1, -1),
+    Size = UDim2.new(1, 0, 0, 1),
+    BackgroundColor3 = RED,
     BorderSizePixel = 0,
+    ZIndex = 6,
 }, Header)
 
 local TitleIcon = New("TextLabel", {
-    Position = UDim2.fromOffset(14, 7),
-    Size = UDim2.fromOffset(34, 34),
+    Position = UDim2.fromOffset(13, 6),
+    Size = UDim2.fromOffset(32, 32),
     BackgroundTransparency = 1,
-    Font = FONT_BOLD,
-    Text = "♟",
-    TextSize = 27,
+    Font = BOLD,
+    Text = "✦",
+    TextSize = 23,
     TextColor3 = WHITE,
+    ZIndex = 7,
 }, Header)
-SetTextGradient(TitleIcon)
+TextGradient(TitleIcon)
 
 local Title = New("TextLabel", {
-    Position = UDim2.fromOffset(56, 7),
-    Size = UDim2.fromOffset(260, 21),
+    Position = UDim2.fromOffset(48, 5),
+    Size = UDim2.fromOffset(230, 20),
     BackgroundTransparency = 1,
-    Font = FONT_BOLD,
+    Font = BOLD,
     Text = "SAIKI EMOTES",
-    TextSize = 16,
+    TextSize = 14,
     TextXAlignment = Enum.TextXAlignment.Left,
     TextColor3 = WHITE,
+    ZIndex = 7,
 }, Header)
-SetTextGradient(Title)
+TextGradient(Title)
 
 local Subtitle = New("TextLabel", {
-    Position = UDim2.fromOffset(57, 28),
-    Size = UDim2.fromOffset(300, 14),
+    Position = UDim2.fromOffset(49, 23),
+    Size = UDim2.fromOffset(230, 13),
     BackgroundTransparency = 1,
     Font = FONT,
-    Text = "EMOTE PLAYER",
-    TextSize = 8,
+    Text = "ROBLOX EMOTE CATALOG",
+    TextSize = 7,
     TextXAlignment = Enum.TextXAlignment.Left,
     TextColor3 = MUTED,
+    ZIndex = 7,
 }, Header)
 
--- Status dot
 local StatusDot = New("Frame", {
-    Position = UDim2.new(1, -112, 0.5, -5),
-    Size = UDim2.fromOffset(10, 10),
-    BackgroundColor3 = Color3.fromRGB(70, 235, 120),
+    Position = UDim2.new(1, -82, 0.5, -4),
+    Size = UDim2.fromOffset(8, 8),
+    BackgroundColor3 = GREEN,
     BorderSizePixel = 0,
+    ZIndex = 7,
 }, Header)
-AddCorner(StatusDot, 5)
+Corner(StatusDot, 4)
 
 local StatusText = New("TextLabel", {
-    Position = UDim2.new(1, -97, 0.5, -8),
-    Size = UDim2.fromOffset(70, 16),
+    Position = UDim2.new(1, -68, 0.5, -7),
+    Size = UDim2.fromOffset(55, 14),
     BackgroundTransparency = 1,
-    Font = FONT,
-    Text = "READY",
-    TextSize = 8,
+    Font = BOLD,
+    Text = "CATALOG",
+    TextSize = 7,
     TextColor3 = MUTED,
     TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 7,
 }, Header)
 
--- No hide button here, deliberately.
-local HeaderLine = New("Frame", {
-    Position = UDim2.new(1, -20, 0, 11),
-    Size = UDim2.fromOffset(3, 28),
-    BackgroundColor3 = THEME_RED,
-    BorderSizePixel = 0,
-}, Header)
-AddCorner(HeaderLine, 2)
-
---//============================================================
---// SEARCH
---//============================================================
+--============================================================
+-- SEARCH
+--============================================================
 
 local SearchHolder = New("Frame", {
-    Position = UDim2.fromOffset(12, 62),
-    Size = UDim2.new(1, -24, 0, 32),
+    Position = UDim2.fromOffset(10, 53),
+    Size = UDim2.new(1, -20, 0, 28),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.28,
     BorderSizePixel = 0,
-}, Inner)
+    ZIndex = 5,
+}, Glass)
+Corner(SearchHolder, 8)
+Stroke(SearchHolder, Color3.fromRGB(67, 27, 36), 1)
 
-AddCorner(SearchHolder, 9)
-AddStroke(SearchHolder, Color3.fromRGB(57, 27, 34), 1)
-
-local SearchIcon = New("TextLabel", {
-    Position = UDim2.fromOffset(12, 0),
-    Size = UDim2.fromOffset(22, 32),
+New("TextLabel", {
+    Position = UDim2.fromOffset(9, 0),
+    Size = UDim2.fromOffset(20, 28),
     BackgroundTransparency = 1,
-    Font = FONT_BOLD,
+    Font = BOLD,
     Text = "⌕",
-    TextSize = 21,
+    TextSize = 18,
     TextColor3 = MUTED,
+    ZIndex = 6,
 }, SearchHolder)
 
 local Search = New("TextBox", {
-    Position = UDim2.fromOffset(34, 0),
-    Size = UDim2.new(1, -46, 1, 0),
+    Position = UDim2.fromOffset(29, 0),
+    Size = UDim2.new(1, -38, 1, 0),
     BackgroundTransparency = 1,
     ClearTextOnFocus = false,
     Font = FONT,
-    PlaceholderText = "Search emotes...",
+    PlaceholderText = "Search all Roblox emotes...",
     PlaceholderColor3 = MUTED,
     Text = "",
     TextColor3 = WHITE,
-    TextSize = 10,
+    TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 6,
 }, SearchHolder)
 
---//============================================================
---// CONTENT AREA
---//============================================================
+--============================================================
+-- CONTENT / GRID
+--============================================================
 
 local GridHolder = New("Frame", {
-    Position = UDim2.fromOffset(12, 104),
-    Size = UDim2.new(1, -24, 1, -169),
+    Position = UDim2.fromOffset(10, 89),
+    Size = UDim2.new(1, -20, 1, -139),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
-}, Inner)
+    ZIndex = 4,
+}, Glass)
 
 local Grid = New("ScrollingFrame", {
     Name = "EmoteGrid",
@@ -370,516 +416,310 @@ local Grid = New("ScrollingFrame", {
     BorderSizePixel = 0,
     CanvasSize = UDim2.new(),
     AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    ScrollBarThickness = 4,
-    ScrollBarImageColor3 = THEME_RED,
-    ScrollBarImageTransparency = 0.2,
+    ScrollBarThickness = 3,
+    ScrollBarImageColor3 = RED,
+    ScrollBarImageTransparency = 0.15,
     ScrollingDirection = Enum.ScrollingDirection.Y,
+    ZIndex = 4,
 }, GridHolder)
 
+local GridPadding = New("UIPadding", {
+    PaddingLeft = UDim.new(0, 2),
+    PaddingTop = UDim.new(0, 2),
+    PaddingRight = UDim.new(0, 5),
+    PaddingBottom = UDim.new(0, 5),
+}, Grid)
+
+-- 5 columns x 2 rows = exactly 10 cards visible in the compact window.
 local GridLayout = New("UIGridLayout", {
-    CellSize = UDim2.fromOffset(105, 126),
-    CellPadding = UDim2.fromOffset(8, 8),
+    CellSize = UDim2.fromOffset(88, 94),
+    CellPadding = UDim2.fromOffset(7, 7),
+    FillDirection = Enum.FillDirection.Horizontal,
+    FillDirectionMaxCells = 5,
     SortOrder = Enum.SortOrder.LayoutOrder,
 }, Grid)
 
-New("UIPadding", {
-    PaddingRight = UDim.new(0, 8),
-    PaddingBottom = UDim.new(0, 8),
-}, Grid)
+local EmptyText = New("TextLabel", {
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = UDim2.new(1, -30, 0, 45),
+    BackgroundTransparency = 1,
+    Font = BOLD,
+    Text = "",
+    TextSize = 11,
+    TextWrapped = true,
+    TextColor3 = MUTED,
+    Visible = false,
+    ZIndex = 10,
+}, GridHolder)
+TextGradient(EmptyText)
 
---//============================================================
---// BOTTOM NAVIGATION
---//============================================================
+--============================================================
+-- BOTTOM NAV + PAGINATION INSIDE CONTENT
+--============================================================
 
-local BottomBar = New("Frame", {
-    Position = UDim2.new(0, 0, 1, -54),
-    Size = UDim2.new(1, 0, 0, 54),
+local PageArea = New("Frame", {
+    Position = UDim2.new(0, 0, 1, -49),
+    Size = UDim2.new(1, 0, 0, 45),
     BackgroundColor3 = BLACK_2,
-    BackgroundTransparency = 0.16,
+    BackgroundTransparency = 0.18,
     BorderSizePixel = 0,
-}, Inner)
+    ZIndex = 15,
+}, Glass)
 
-local BottomAccent = New("Frame", {
+local PageLine = New("Frame", {
     Position = UDim2.fromOffset(0, 0),
     Size = UDim2.new(1, 0, 0, 1),
     BackgroundColor3 = DARK_RED,
     BorderSizePixel = 0,
-}, BottomBar)
+    ZIndex = 16,
+}, PageArea)
 
-local TabButtons = {}
+-- Page controls are deliberately ABOVE the tab buttons and remain inside
+-- the actual content area, rather than being over the navigation buttons.
+local PrevPage = New("TextButton", {
+    Position = UDim2.new(0, 12, 0, 7),
+    Size = UDim2.fromOffset(32, 28),
+    BackgroundColor3 = GLASS_2,
+    BackgroundTransparency = 0.12,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Font = BOLD,
+    Text = "‹",
+    TextSize = 20,
+    TextColor3 = WHITE,
+    ZIndex = 18,
+}, PageArea)
+Corner(PrevPage, 7)
+Stroke(PrevPage, DARK_RED, 1)
 
-local function MakeBottomTab(name, text, xScale)
-    local button = New("TextButton", {
-        Name = name,
-        Position = UDim2.new(xScale, 0, 0, 6),
-        Size = UDim2.new(0.5, -10, 0, 40),
-        BackgroundColor3 = BLACK_2,
-        BorderSizePixel = 0,
-        AutoButtonColor = false,
-        Font = FONT_BOLD,
-        Text = text,
-        TextSize = 12,
-        TextColor3 = MUTED,
-    }, BottomBar)
-
-    AddCorner(button, 9)
-    AddStroke(button, Color3.fromRGB(45, 23, 29), 1)
-
-    TabButtons[name] = button
-    return button
-end
-
-MakeBottomTab("Emotes", "EMOTES", 0)
-MakeBottomTab("Favorites", "FAVORITES", 0.5)
+local NextPage = New("TextButton", {
+    Position = UDim2.new(1, -44, 0, 7),
+    Size = UDim2.fromOffset(32, 28),
+    BackgroundColor3 = GLASS_2,
+    BackgroundTransparency = 0.12,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Font = BOLD,
+    Text = "›",
+    TextSize = 20,
+    TextColor3 = WHITE,
+    ZIndex = 18,
+}, PageArea)
+Corner(NextPage, 7)
+Stroke(NextPage, DARK_RED, 1)
 
 local PageLabel = New("TextLabel", {
     AnchorPoint = Vector2.new(0.5, 0),
-    Position = UDim2.new(0.5, 0, 1, -25),
-    Size = UDim2.fromOffset(140, 16),
+    Position = UDim2.new(0.5, 0, 0, 7),
+    Size = UDim2.fromOffset(100, 28),
     BackgroundTransparency = 1,
-    Font = FONT_BOLD,
-    Text = "1 / 1",
-    TextSize = 10,
-    TextColor3 = MUTED,
-}, Inner)
+    Font = BOLD,
+    Text = "1 / ...",
+    TextSize = 9,
+    TextColor3 = WHITE,
+    ZIndex = 18,
+}, PageArea)
+TextGradient(PageLabel)
 
---//============================================================
---// HUD
---//============================================================
+local Tabs = New("Frame", {
+    Position = UDim2.new(0, 0, 1, -45),
+    Size = UDim2.new(1, 0, 0, 45),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ZIndex = 20,
+}, Glass)
+
+-- Tab buttons sit in a separate strip at the very bottom.
+local TabEmotes = New("TextButton", {
+    Position = UDim2.fromOffset(9, 5),
+    Size = UDim2.fromOffset(236, 34),
+    BackgroundColor3 = GLASS_2,
+    BackgroundTransparency = 0.05,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Font = BOLD,
+    Text = "EMOTES",
+    TextSize = 9,
+    TextColor3 = WHITE,
+    ZIndex = 21,
+}, Tabs)
+Corner(TabEmotes, 8)
+local EmoteTabStroke = Stroke(TabEmotes, RED, 1)
+TextGradient(TabEmotes)
+
+local TabFavorites = New("TextButton", {
+    Position = UDim2.new(1, -245, 0, 5),
+    Size = UDim2.fromOffset(236, 34),
+    BackgroundColor3 = BLACK_2,
+    BackgroundTransparency = 0.18,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Font = BOLD,
+    Text = "FAVORITES",
+    TextSize = 9,
+    TextColor3 = MUTED,
+    ZIndex = 21,
+}, Tabs)
+Corner(TabFavorites, 8)
+local FavoriteTabStroke = Stroke(TabFavorites, DARK_RED, 1)
+
+-- The page area overlays the content but the tabs are always visibly below it.
+-- This compact arrangement leaves page controls inside the browser itself.
+PageArea.Position = UDim2.new(0, 0, 1, -90)
+PageArea.Size = UDim2.new(1, 0, 0, 45)
+Tabs.Position = UDim2.new(0, 0, 1, -45)
+Tabs.Size = UDim2.new(1, 0, 0, 45)
+
+--============================================================
+-- HUD
+--============================================================
 
 local Hud = New("Frame", {
     Name = "EmoteControlHUD",
     AnchorPoint = Vector2.new(0.5, 1),
-    Position = UDim2.new(0.5, 0, 1, -64),
-    Size = UDim2.fromOffset(390, 58),
+    Position = UDim2.new(0.5, 0, 0, -8),
+    Size = UDim2.fromOffset(330, 48),
     BackgroundColor3 = BLACK,
+    BackgroundTransparency = 0.12,
     BorderSizePixel = 0,
     Visible = false,
     ZIndex = 50,
 }, MainGui)
-
-AddCorner(Hud, 11)
-AddMovingBorder(Hud, 1.5)
+Corner(Hud, 10)
+MovingBorder(Hud, 1.5)
 
 local HudInner = New("Frame", {
     Position = UDim2.fromOffset(2, 2),
     Size = UDim2.new(1, -4, 1, -4),
-    BackgroundColor3 = PANEL,
-    BackgroundTransparency = 0.16,
+    BackgroundColor3 = GLASS,
+    BackgroundTransparency = 0.12,
     BorderSizePixel = 0,
     ZIndex = 51,
 }, Hud)
-AddCorner(HudInner, 9)
+Corner(HudInner, 8)
 
 local HudName = New("TextLabel", {
-    Position = UDim2.fromOffset(10, 6),
-    Size = UDim2.fromOffset(155, 18),
+    Position = UDim2.fromOffset(10, 5),
+    Size = UDim2.fromOffset(145, 17),
     BackgroundTransparency = 1,
-    Font = FONT_BOLD,
+    Font = BOLD,
     Text = "No emote",
-    TextSize = 12,
+    TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left,
     TextColor3 = WHITE,
     ZIndex = 52,
 }, HudInner)
-SetTextGradient(HudName)
+TextGradient(HudName)
 
 local HudSpeed = New("TextLabel", {
-    Position = UDim2.fromOffset(10, 26),
-    Size = UDim2.fromOffset(90, 14),
+    Position = UDim2.fromOffset(10, 23),
+    Size = UDim2.fromOffset(75, 14),
     BackgroundTransparency = 1,
     Font = FONT,
-    Text = "Speed 1.0x",
-    TextSize = 8,
+    Text = "1.0x",
+    TextSize = 7,
     TextColor3 = MUTED,
     TextXAlignment = Enum.TextXAlignment.Left,
     ZIndex = 52,
 }, HudInner)
 
-local HudTime = New("TextLabel", {
-    Position = UDim2.fromOffset(103, 26),
-    Size = UDim2.fromOffset(70, 14),
-    BackgroundTransparency = 1,
-    Font = FONT,
-    Text = "Playing",
-    TextSize = 8,
-    TextColor3 = MUTED,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 52,
-}, HudInner)
-
-local SpeedDown = New("TextButton", {
-    Position = UDim2.new(1, -239, 0, 11),
-    Size = UDim2.fromOffset(32, 32),
-    BackgroundColor3 = PANEL_3,
-    BackgroundTransparency = 0.18,
+local Minus = New("TextButton", {
+    Position = UDim2.new(1, -202, 0, 8),
+    Size = UDim2.fromOffset(28, 30),
+    BackgroundColor3 = BLACK_2,
     BorderSizePixel = 0,
     AutoButtonColor = false,
-    Font = FONT_BOLD,
+    Font = BOLD,
     Text = "−",
     TextSize = 15,
     TextColor3 = WHITE,
     ZIndex = 52,
 }, HudInner)
-AddCorner(SpeedDown, 7)
+Corner(Minus, 6)
 
-local SpeedValue = New("TextLabel", {
-    Position = UDim2.new(1, -185, 0, 11),
-    Size = UDim2.fromOffset(50, 32),
-    BackgroundColor3 = PANEL_3,
-    BorderSizePixel = 0,
-    Font = FONT_BOLD,
-    Text = "1.0x",
-    TextSize = 10,
-    TextColor3 = WHITE,
-    ZIndex = 52,
-}, HudInner)
-AddCorner(SpeedValue, 7)
-SetTextGradient(SpeedValue)
-
-local SpeedUp = New("TextButton", {
-    Position = UDim2.new(1, -149, 0, 11),
-    Size = UDim2.fromOffset(32, 32),
-    BackgroundColor3 = PANEL_3,
+local Plus = New("TextButton", {
+    Position = UDim2.new(1, -169, 0, 8),
+    Size = UDim2.fromOffset(28, 30),
+    BackgroundColor3 = BLACK_2,
     BorderSizePixel = 0,
     AutoButtonColor = false,
-    Font = FONT_BOLD,
+    Font = BOLD,
     Text = "+",
     TextSize = 15,
     TextColor3 = WHITE,
     ZIndex = 52,
 }, HudInner)
-AddCorner(SpeedUp, 7)
+Corner(Plus, 6)
 
-local LoopButton = New("TextButton", {
-    Position = UDim2.new(1, -103, 0, 11),
-    Size = UDim2.fromOffset(42, 32),
-    BackgroundColor3 = THEME_RED,
+local Loop = New("TextButton", {
+    Position = UDim2.new(1, -136, 0, 8),
+    Size = UDim2.fromOffset(42, 30),
+    BackgroundColor3 = RED,
     BorderSizePixel = 0,
     AutoButtonColor = false,
-    Font = FONT_BOLD,
+    Font = BOLD,
     Text = "LOOP",
-    TextSize = 8,
+    TextSize = 7,
     TextColor3 = WHITE,
     ZIndex = 52,
 }, HudInner)
-AddCorner(LoopButton, 7)
+Corner(Loop, 6)
 
-local PauseButton = New("TextButton", {
-    Position = UDim2.new(1, -57, 0, 11),
-    Size = UDim2.fromOffset(42, 32),
-    BackgroundColor3 = PANEL_3,
+local Pause = New("TextButton", {
+    Position = UDim2.new(1, -89, 0, 8),
+    Size = UDim2.fromOffset(38, 30),
+    BackgroundColor3 = BLACK_2,
     BorderSizePixel = 0,
     AutoButtonColor = false,
-    Font = FONT_BOLD,
+    Font = BOLD,
     Text = "II",
-    TextSize = 10,
+    TextSize = 9,
     TextColor3 = WHITE,
     ZIndex = 52,
 }, HudInner)
-AddCorner(PauseButton, 7)
+Corner(Pause, 6)
 
-local StopButton = New("TextButton", {
-    Position = UDim2.new(1, -11, 0, 11),
-    Size = UDim2.fromOffset(42, 32),
-    BackgroundColor3 = THEME_RED,
+local Stop = New("TextButton", {
+    Position = UDim2.new(1, -46, 0, 8),
+    Size = UDim2.fromOffset(38, 30),
+    BackgroundColor3 = RED,
     BorderSizePixel = 0,
     AutoButtonColor = false,
-    Font = FONT_BOLD,
-    Text = "STOP",
-    TextSize = 8,
+    Font = BOLD,
+    Text = "■",
+    TextSize = 11,
     TextColor3 = WHITE,
     ZIndex = 52,
 }, HudInner)
-AddCorner(StopButton, 7)
+Corner(Stop, 6)
 
-local ProgressBack = New("Frame", {
-    Position = UDim2.fromOffset(12, 51),
-    Size = UDim2.fromOffset(185, 4),
-    BackgroundColor3 = PANEL_3,
-    BorderSizePixel = 0,
-    ZIndex = 52,
-}, HudInner)
-AddCorner(ProgressBack, 3)
-
-local Progress = New("Frame", {
-    Size = UDim2.fromScale(0, 1),
-    BackgroundColor3 = THEME_RED,
-    BorderSizePixel = 0,
-    ZIndex = 53,
-}, ProgressBack)
-AddCorner(Progress, 3)
-
---//============================================================
---// SEPARATE TOGGLE BUTTON
---//============================================================
-
-local ToggleButton = New("TextButton", {
-    Name = "SaikiToggle",
-    AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.new(0, 65, 0.5, 0),
-    Size = UDim2.fromOffset(54, 54),
-    BackgroundColor3 = BLACK,
-    BorderSizePixel = 0,
-    AutoButtonColor = false,
-    Font = FONT_BOLD,
-    Text = "S",
-    TextSize = 20,
-    TextColor3 = WHITE,
-    ZIndex = 100,
-}, ToggleGui)
-
-AddCorner(ToggleButton, 14)
-AddMovingBorder(ToggleButton, 2)
-
-local ToggleText = New("TextLabel", {
-    Position = UDim2.new(0, 0, 1, -16),
-    Size = UDim2.new(1, 0, 0, 12),
-    BackgroundTransparency = 1,
-    Font = FONT_BOLD,
-    Text = "SAIKI",
-    TextSize = 6,
-    TextColor3 = WHITE,
-    ZIndex = 101,
-}, ToggleButton)
-SetTextGradient(ToggleText)
-
---//============================================================
---// HTTP / DATABASE
---//============================================================
-
-local function GetHttpFunction()
-    local candidates = {
-        request,
-        http_request,
-        (syn and syn.request),
-        (http and http.request),
-    }
-
-    for _, fn in ipairs(candidates) do
-        if type(fn) == "function" then
-            return fn
-        end
-    end
-
-    return nil
-end
-
-local function HttpGet(url)
-    local requestFunction = GetHttpFunction()
-
-    if requestFunction then
-        local ok, response = pcall(requestFunction, {
-            Url = url,
-            Method = "GET",
-            Headers = {
-                ["Accept"] = "application/json",
-                ["Cache-Control"] = "no-cache",
-            },
-        })
-
-        if ok and response then
-            local body = response.Body or response.body
-            if type(body) == "string" and #body > 2 then
-                return body
-            end
-        end
-    end
-
-    local ok, result = pcall(function()
-        return game:HttpGet(url)
-    end)
-
-    if ok and type(result) == "string" and #result > 2 then
-        return result
-    end
-
-    return nil
-end
-
-local function NormaliseEmote(entry)
-    if type(entry) ~= "table" then
-        return nil
-    end
-
-    local id = entry.id or entry.ID or entry.animationId or entry.animationID
-    local name = entry.name or entry.Name or entry.title
-
-    id = tonumber(id)
-
-    if not id then
-        return nil
-    end
-
-    if not name or tostring(name) == "" then
-        return nil
-    end
-
-    return {
-        id = id,
-        name = tostring(name),
-    }
-end
-
-local function LoadEmotes()
-    -- Same emote database endpoint used by the supplied VEX script.
-    -- The Saiki version does not embed VEX's private authentication secret.
-    local url = "https://vexroscripts.com.tr/api/emotes.json?t=" .. tostring(math.floor(os.clock() * 1000))
-
-    for attempt = 1, 3 do
-        local raw = HttpGet(url)
-
-        if raw and (raw:sub(1, 1) == "{" or raw:sub(1, 1) == "[") then
-            local decoded = SafeCall(function()
-                return HttpService:JSONDecode(raw)
-            end)
-
-            if type(decoded) == "table" then
-                local source = decoded.data or decoded.emotes or decoded
-
-                if type(source) == "table" then
-                    local loaded = {}
-                    local seen = {}
-
-                    for _, entry in ipairs(source) do
-                        local emote = NormaliseEmote(entry)
-
-                        if emote and not seen[emote.id] then
-                            seen[emote.id] = true
-                            loaded[#loaded + 1] = emote
-                        end
-                    end
-
-                    if #loaded > 0 then
-                        table.sort(loaded, function(a, b)
-                            return string.lower(a.name) < string.lower(b.name)
-                        end)
-
-                        Emotes = loaded
-                        return true
-                    end
-                end
-            end
-        end
-
-        if attempt < 3 then
-            task.wait(1)
-        end
-    end
-
-    return false
-end
-
-task.spawn(function()
-    StatusText.Text = "LOADING DATABASE"
-
-    local loaded = LoadEmotes()
-
-    if not loaded then
-        -- Do not pretend five fallback emotes are the full database.
-        -- The user explicitly requested the complete VEX-sized database.
-        Emotes = {}
-        StatusText.Text = "DATABASE OFFLINE"
-    else
-        StatusText.Text = string.format("%d EMOTES", #Emotes)
-    end
-
-    task.defer(function()
-        CurrentPage = 1
-        if RenderCurrentTab then
-            RenderCurrentTab()
-        end
-    end)
-end)
-
---//============================================================
---// FAVORITES
---//============================================================
-
-local function IsFavorite(id)
-    return FavoritesSet[id] == true
-end
-
-local function ToggleFavorite(id)
-    if IsFavorite(id) then
-        FavoritesSet[id] = nil
-
-        for index, favId in ipairs(Favorites) do
-            if favId == id then
-                table.remove(Favorites, index)
-                break
-            end
-        end
-    else
-        FavoritesSet[id] = true
-        table.insert(Favorites, id)
-    end
-end
-
-local function GetFavoriteEmotes()
-    local result = {}
-
-    for _, favId in ipairs(Favorites) do
-        for _, emote in ipairs(Emotes) do
-            if emote.id == favId then
-                table.insert(result, emote)
-                break
-            end
-        end
-    end
-
-    return result
-end
-
---//============================================================
---// ANIMATION PLAYER
---//============================================================
+--============================================================
+-- EMOTE PLAYBACK
+--============================================================
 
 local function GetAnimator()
     local character = Player.Character or Player.CharacterAdded:Wait()
     local humanoid = character:FindFirstChildOfClass("Humanoid")
-
-    if not humanoid then
-        return nil, nil
-    end
+    if not humanoid then return nil, nil end
 
     local animator = humanoid:FindFirstChildOfClass("Animator")
-
     if not animator then
         animator = Instance.new("Animator")
         animator.Parent = humanoid
     end
-
     return animator, humanoid
 end
 
-local function StopAllTracks()
-    local animator = GetAnimator()
-
-    if not animator then
-        return
-    end
-
-    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-        pcall(function()
-            track:Stop(0.1)
-        end)
-    end
-end
-
 local function StopEmote()
-    if HeartbeatConnection then
-        HeartbeatConnection:Disconnect()
-        HeartbeatConnection = nil
+    if TrackConnection then
+        TrackConnection:Disconnect()
+        TrackConnection = nil
     end
 
     if CurrentTrack then
-        pcall(function()
-            CurrentTrack:Stop(0.12)
-            CurrentTrack:Destroy()
-        end)
+        pcall(function() CurrentTrack:Stop(0.12) end)
     end
-
     CurrentTrack = nil
 
     if CurrentAnimation then
@@ -889,47 +729,16 @@ local function StopEmote()
 
     CurrentEmote = nil
     Hud.Visible = false
-    PauseButton.Text = "II"
-    Progress.Size = UDim2.fromScale(0, 1)
-    HudTime.Text = "Stopped"
-end
-
-local function UpdateHudText()
-    HudSpeed.Text = string.format("Speed %.2fx", Settings.Speed)
-    SpeedValue.Text = string.format("%.1fx", Settings.Speed)
-
-    if CurrentEmote then
-        HudName.Text = CurrentEmote.name
-    else
-        HudName.Text = "No emote"
-    end
-end
-
-local function ApplySpeed()
-    if CurrentTrack then
-        pcall(function()
-            CurrentTrack:AdjustSpeed(Settings.Speed)
-        end)
-    end
-
-    UpdateHudText()
+    Pause.Text = "II"
 end
 
 local function PlayEmote(emote)
-    if not emote then
-        return
-    end
-
     local animator = GetAnimator()
-    if not animator then
-        return
-    end
+    if not animator or not emote or not emote.id then return end
 
     StopEmote()
-    StopAllTracks()
 
     local animation = Instance.new("Animation")
-    animation.Name = "SaikiEmoteAnimation"
     animation.AnimationId = "rbxassetid://" .. tostring(emote.id)
     CurrentAnimation = animation
 
@@ -938,43 +747,30 @@ local function PlayEmote(emote)
     end)
 
     if not ok or not track then
-        animation:Destroy()
-        CurrentAnimation = nil
-        StatusText.Text = "ANIMATION ERROR"
-        task.delay(1.5, function()
-            if StatusText then
-                StatusText.Text = "READY"
-            end
-        end)
-        return
-    end
-
-    CurrentTrack = track
-    CurrentEmote = emote
-
-    track.Priority = Enum.AnimationPriority.Action
-    track.Looped = Settings.Loop
-
-    local playOk = pcall(function()
-        track:Play(0.12)
-        track:AdjustSpeed(Settings.Speed)
-    end)
-
-    if not playOk then
         StopEmote()
         return
     end
 
-    UpdateHudText()
+    CurrentEmote = emote
+    CurrentTrack = track
+    track.Priority = Enum.AnimationPriority.Action4
+    track.Looped = Settings.Looped
 
-    if Settings.ShowHUD then
-        Hud.Visible = true
+    local played = pcall(function()
+        track:Play(0.1, 1, Settings.Speed)
+    end)
+
+    if not played then
+        StopEmote()
+        return
     end
 
-    HeartbeatConnection = RunService.Heartbeat:Connect(function()
-        if CurrentTrack ~= track then
-            return
-        end
+    HudName.Text = emote.name
+    HudSpeed.Text = string.format("%.2fx", Settings.Speed)
+    Hud.Visible = true
+
+    TrackConnection = RunService.Heartbeat:Connect(function()
+        if not CurrentTrack or CurrentTrack ~= track then return end
 
         if not track.IsPlaying then
             StopEmote()
@@ -983,89 +779,87 @@ local function PlayEmote(emote)
 
         if Settings.StopOnMovement then
             local _, humanoid = GetAnimator()
-
             if humanoid and humanoid.MoveDirection.Magnitude > 0.05 then
                 StopEmote()
                 return
             end
         end
-
-        if Hud.Visible then
-            local length = track.Length
-            local position = track.TimePosition
-
-            if length and length > 0 then
-                Progress.Size = UDim2.new(
-                    math.clamp(position / length, 0, 1),
-                    0,
-                    1,
-                    0
-                )
-
-                HudTime.Text = string.format(
-                    "%0.1f / %0.1f",
-                    position,
-                    length
-                )
-            else
-                Progress.Size = UDim2.fromScale(0, 1)
-                HudTime.Text = "Playing"
-            end
-        end
     end)
 end
 
---//============================================================
---// CARD CREATION
---//============================================================
+--============================================================
+-- CATALOG SEARCH
+--============================================================
 
-local function GetThumbnail(id)
-    -- Roblox's thumbnail protocol gives the actual Roblox asset cover
-    -- rather than a generated placeholder.
-    return "rbxthumb://type=Asset&id=" .. tostring(id) .. "&w=420&h=420"
+local function BuildCatalogPage(query)
+    local params = CatalogSearchParams.new()
+    params.SearchKeyword = query or ""
+    params.CategoryFilter = Enum.CatalogCategoryFilter.None
+    params.SalesTypeFilter = Enum.SalesTypeFilter.All
+    params.AssetTypes = {Enum.AvatarAssetType.EmoteAnimation}
+    params.IncludeOffSale = true
+    params.Limit = PAGE_SIZE
+    params.SortType = Enum.CatalogSortType.Relevance
+
+    local ok, pages = pcall(function()
+        return AvatarEditorService:SearchCatalog(params)
+    end)
+
+    if ok then return pages end
+    return nil
+end
+
+local function ConvertCatalogEntry(entry)
+    if type(entry) ~= "table" then return nil end
+
+    local id = AssetId(entry.Id or entry.AssetId)
+    local name = entry.Name or entry.name or entry.Title
+
+    if not id or not name then return nil end
+
+    local emote = {
+        id = id,
+        name = tostring(name),
+    }
+
+    KnownEmotes[id] = emote
+    return emote
 end
 
 local function ClearGrid()
     for _, child in ipairs(Grid:GetChildren()) do
-        if child:IsA("GuiObject") and child ~= GridLayout then
+        if child:IsA("GuiObject") and child ~= GridLayout and child ~= GridPadding then
             child:Destroy()
         end
     end
 end
 
-local function CreateCard(emote, layoutOrder)
-    local card = New("Frame", {
+local function CreateCard(emote, order)
+    local Card = New("Frame", {
         Name = "EmoteCard",
-        Size = UDim2.fromOffset(105, 126),
+        Size = UDim2.fromOffset(88, 94),
         BackgroundColor3 = BLACK_2,
-        BackgroundTransparency = 0.18,
+        BackgroundTransparency = 0.14,
         BorderSizePixel = 0,
-        LayoutOrder = layoutOrder,
+        LayoutOrder = order,
+        ZIndex = 5,
     }, Grid)
+    Corner(Card, 9)
 
-    AddCorner(card, 9)
-
-    local cardStroke = AddStroke(
-        card,
-        Color3.fromRGB(74, 18, 28),
-        1
-    )
-
-    -- Animated border is intentionally subtle on cards.
+    local cardStroke = Stroke(Card, DARK_RED, 1)
     local cardGradient = Instance.new("UIGradient")
     cardGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(10, 10, 12)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 35, 52)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 12)),
+        ColorSequenceKeypoint.new(0, BLACK),
+        ColorSequenceKeypoint.new(0.5, RED),
+        ColorSequenceKeypoint.new(1, BLACK),
     })
-    cardGradient.Rotation = 0
     cardGradient.Parent = cardStroke
 
     task.spawn(function()
-        while card.Parent and cardGradient.Parent do
+        while Card.Parent and cardStroke.Parent do
             local t = TweenService:Create(
                 cardGradient,
-                TweenInfo.new(3.4, Enum.EasingStyle.Linear),
+                TweenInfo.new(3.2, Enum.EasingStyle.Linear),
                 {Rotation = cardGradient.Rotation + 360}
             )
             t:Play()
@@ -1074,78 +868,58 @@ local function CreateCard(emote, layoutOrder)
     end)
 
     local Cover = New("ImageButton", {
-        Name = "Cover",
         Position = UDim2.fromOffset(4, 4),
-        Size = UDim2.fromOffset(97, 89),
-        BackgroundColor3 = PANEL_3,
-        BorderSizePixel = 0,
-        AutoButtonColor = false,
-        Image = GetThumbnail(emote.id),
-        ScaleType = Enum.ScaleType.Crop,
-    }, card)
-
-    AddCorner(Cover, 7)
-
-    local CoverStroke = AddStroke(Cover, Color3.fromRGB(70, 19, 28), 1)
-
-    local CoverOverlay = New("Frame", {
-        Position = UDim2.new(0, 0, 1, -20),
-        Size = UDim2.new(1, 0, 0, 20),
-        BackgroundColor3 = BLACK,
+        Size = UDim2.fromOffset(80, 57),
+        BackgroundColor3 = GLASS_2,
         BackgroundTransparency = 0.18,
         BorderSizePixel = 0,
-    }, Cover)
+        AutoButtonColor = false,
+        Image = Thumbnail(emote.id),
+        ScaleType = Enum.ScaleType.Crop,
+        ZIndex = 6,
+    }, Card)
+    Corner(Cover, 7)
+    Stroke(Cover, Color3.fromRGB(77, 28, 36), 1)
 
-    AddCorner(CoverOverlay, 5)
-
-    -- The name is the only text displayed on the card.
     local Name = New("TextLabel", {
-        Position = UDim2.fromOffset(6, 96),
-        Size = UDim2.new(1, -34, 0, 24),
+        Position = UDim2.fromOffset(5, 63),
+        Size = UDim2.new(1, -10, 0, 17),
         BackgroundTransparency = 1,
-        Font = FONT_BOLD,
+        Font = BOLD,
         Text = emote.name,
-        TextSize = 9,
-        TextWrapped = true,
+        TextSize = 7,
+        TextWrapped = false,
         TextTruncate = Enum.TextTruncate.AtEnd,
-        TextXAlignment = Enum.TextXAlignment.Left,
+        TextXAlignment = Enum.TextXAlignment.Center,
         TextYAlignment = Enum.TextYAlignment.Center,
         TextColor3 = WHITE,
-    }, card)
-    SetTextGradient(Name)
+        ZIndex = 7,
+    }, Card)
+    TextGradient(Name)
 
     local Favorite = New("TextButton", {
-        Position = UDim2.new(1, -29, 1, -29),
-        Size = UDim2.fromOffset(23, 23),
-        BackgroundColor3 = PANEL_3,
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 1, -14),
+        Size = UDim2.fromOffset(24, 13),
+        BackgroundTransparency = 1,
         BorderSizePixel = 0,
         AutoButtonColor = false,
-        Font = FONT_BOLD,
+        Font = BOLD,
         Text = IsFavorite(emote.id) and "★" or "☆",
-        TextSize = 17,
-        TextColor3 = IsFavorite(emote.id) and THEME_RED or STAR_OFF,
-    }, card)
-
-    AddCorner(Favorite, 7)
-
-    local FavStroke = AddStroke(
-        Favorite,
-        IsFavorite(emote.id) and THEME_RED or Color3.fromRGB(62, 34, 39),
-        1
-    )
+        TextSize = 13,
+        TextColor3 = IsFavorite(emote.id) and RED or STAR_OFF,
+        ZIndex = 8,
+    }, Card)
 
     Favorite.MouseButton1Click:Connect(function()
         ToggleFavorite(emote.id)
-
         local active = IsFavorite(emote.id)
-
         Favorite.Text = active and "★" or "☆"
-        Favorite.TextColor3 = active and THEME_RED or STAR_OFF
-        FavStroke.Color = active and THEME_RED or Color3.fromRGB(62, 34, 39)
+        Favorite.TextColor3 = active and RED or STAR_OFF
 
         if CurrentTab == "Favorites" then
             task.defer(function()
-                RenderCurrentTab()
+                RenderFavorites()
             end)
         end
     end)
@@ -1155,343 +929,352 @@ local function CreateCard(emote, layoutOrder)
     end)
 end
 
---//============================================================
---// FILTER / PAGINATION
---//============================================================
+--============================================================
+-- FAVORITES RENDER
+--============================================================
 
-local function GetCurrentData()
-    local query = string.lower(Search.Text or "")
-    local source
-
-    if CurrentTab == "Favorites" then
-        source = GetFavoriteEmotes()
-    else
-        source = Emotes
-    end
-
-    local filtered = {}
-
-    for _, emote in ipairs(source) do
-        if query == "" or string.find(string.lower(emote.name), query, 1, true) then
-            table.insert(filtered, emote)
-        end
-    end
-
-    return filtered
-end
-
-function RenderCurrentTab()
+function RenderFavorites()
     ClearGrid()
+    EmptyText.Visible = false
 
-    local data = GetCurrentData()
-    local totalPages = math.max(1, math.ceil(#data / PAGE_SIZE))
+    local query = string.lower(Search.Text or "")
+    local list = {}
 
-    if CurrentPage > totalPages then
-        CurrentPage = totalPages
+    for _, id in ipairs(Favorites) do
+        local emote = KnownEmotes[id]
+        if emote and (query == "" or string.find(string.lower(emote.name), query, 1, true)) then
+            table.insert(list, emote)
+        end
     end
 
-    if CurrentPage < 1 then
-        CurrentPage = 1
-    end
-
-    local first = ((CurrentPage - 1) * PAGE_SIZE) + 1
-    local last = math.min(first + PAGE_SIZE - 1, #data)
-
-    if #data == 0 then
-        local Empty = New("TextLabel", {
-            Size = UDim2.new(1, -10, 0, 100),
-            BackgroundTransparency = 1,
-            Font = FONT_BOLD,
-            Text = (#Emotes == 0 and CurrentTab == "Emotes")
-                and "The emote database could not be loaded."
-                or (CurrentTab == "Favorites"
-                    and "No favorite emotes yet."
-                    or "No emotes found."),
-            TextSize = 13,
-            TextColor3 = MUTED,
-            TextWrapped = true,
-            LayoutOrder = 1,
-        }, Grid)
-
-        SetTextGradient(Empty)
+    if #list == 0 then
+        EmptyText.Text = (#Favorites == 0)
+            and "No favorite emotes yet.\nStar an emote in the EMOTES tab."
+            or "Your favorites are not loaded on this page yet.\nOpen the EMOTES tab and favorite them again if needed."
+        EmptyText.Visible = true
     else
-        local order = 0
-
-        for index = first, last do
-            order += 1
-            CreateCard(data[index], order)
+        for i, emote in ipairs(list) do
+            CreateCard(emote, i)
         end
     end
 
-    PageLabel.Text = string.format("%d / %d", CurrentPage, totalPages)
-
-    Grid.CanvasPosition = Vector2.new(0, 0)
+    PageLabel.Text = "FAVORITES"
+    PrevPage.Visible = false
+    NextPage.Visible = false
 end
 
---//============================================================
---// PAGE BUTTONS
---//============================================================
+--============================================================
+-- CATALOG RENDER
+--============================================================
 
-local PrevPage = New("TextButton", {
-    Position = UDim2.new(0, 12, 1, -43),
-    Size = UDim2.fromOffset(32, 28),
-    BackgroundColor3 = PANEL_3,
-    BorderSizePixel = 0,
-    AutoButtonColor = false,
-    Font = FONT_BOLD,
-    Text = "‹",
-    TextSize = 22,
-    TextColor3 = WHITE,
-    ZIndex = 20,
-}, Inner)
-AddCorner(PrevPage, 7)
-AddStroke(PrevPage, DARK_RED, 1)
+local function RenderCatalogPages(pages, generation, pageNumber)
+    if generation ~= SearchGeneration or CurrentTab ~= "Emotes" then return end
 
-local NextPage = New("TextButton", {
-    Position = UDim2.new(1, -44, 1, -43),
-    Size = UDim2.fromOffset(32, 28),
-    BackgroundColor3 = PANEL_3,
-    BorderSizePixel = 0,
-    AutoButtonColor = false,
-    Font = FONT_BOLD,
-    Text = "›",
-    TextSize = 22,
-    TextColor3 = WHITE,
-    ZIndex = 20,
-}, Inner)
-AddCorner(NextPage, 7)
-AddStroke(NextPage, DARK_RED, 1)
-
-PrevPage.MouseButton1Click:Connect(function()
-    if CurrentPage > 1 then
-        CurrentPage -= 1
-        RenderCurrentTab()
-    end
-end)
-
-NextPage.MouseButton1Click:Connect(function()
-    local data = GetCurrentData()
-    local pages = math.max(1, math.ceil(#data / PAGE_SIZE))
-
-    if CurrentPage < pages then
-        CurrentPage += 1
-        RenderCurrentTab()
-    end
-end)
-
---//============================================================
---// TABS
---//============================================================
-
-local function SelectTab(tabName)
-    CurrentTab = tabName
-    CurrentPage = 1
-
-    for name, button in pairs(TabButtons) do
-        local selected = name == tabName
-
-        if selected then
-            button.BackgroundColor3 = DARK_RED
-            button.TextColor3 = WHITE
-        else
-            button.BackgroundColor3 = BLACK_2
-            button.TextColor3 = MUTED
-        end
-    end
-
-    RenderCurrentTab()
-end
-
-for name, button in pairs(TabButtons) do
-    button.MouseButton1Click:Connect(function()
-        SelectTab(name)
+    local entries = Safe(function()
+        return pages:GetCurrentPage()
     end)
-end
 
-Search:GetPropertyChangedSignal("Text"):Connect(function()
-    CurrentPage = 1
-    RenderCurrentTab()
-end)
-
---//============================================================
---// HUD CONTROLS
---//============================================================
-
-SpeedDown.MouseButton1Click:Connect(function()
-    Settings.Speed = math.max(0.25, Settings.Speed - 0.25)
-    ApplySpeed()
-end)
-
-SpeedUp.MouseButton1Click:Connect(function()
-    Settings.Speed = math.min(3, Settings.Speed + 0.25)
-    ApplySpeed()
-end)
-
-LoopButton.MouseButton1Click:Connect(function()
-    Settings.Loop = not Settings.Loop
-
-    LoopButton.BackgroundColor3 = Settings.Loop
-        and THEME_RED
-        or PANEL_3
-
-    if CurrentTrack then
-        CurrentTrack.Looped = Settings.Loop
-    end
-end)
-
-PauseButton.MouseButton1Click:Connect(function()
-    if not CurrentTrack then
+    if type(entries) ~= "table" then
+        EmptyText.Text = "Unable to read the Roblox emote catalog."
+        EmptyText.Visible = true
         return
     end
 
-    if CurrentTrack.IsPlaying then
-        pcall(function()
-            CurrentTrack:AdjustSpeed(0)
-        end)
+    ClearGrid()
+    EmptyText.Visible = false
 
-        PauseButton.Text = "▶"
+    local count = 0
+    for _, entry in ipairs(entries) do
+        local emote = ConvertCatalogEntry(entry)
+        if emote then
+            count += 1
+            CreateCard(emote, count)
+        end
+    end
+
+    if count == 0 then
+        EmptyText.Text = SearchQuery == ""
+            and "No Roblox emotes were returned by the catalog."
+            or "No emotes matched your search."
+        EmptyText.Visible = true
+    end
+
+    local finished = false
+    pcall(function() finished = pages.IsFinished end)
+
+    PageLabel.Text = tostring(pageNumber) .. " / " .. (finished and tostring(pageNumber) or "...")
+    PrevPage.Visible = pageNumber > 1
+    NextPage.Visible = not finished
+end
+
+local function LoadCatalogPage(pageNumber)
+    SearchGeneration += 1
+    local generation = SearchGeneration
+    StatusText.Text = "LOADING"
+    StatusDot.BackgroundColor3 = Color3.fromRGB(255, 190, 65)
+    EmptyText.Visible = false
+    ClearGrid()
+    PageLabel.Text = "LOADING"
+
+    task.spawn(function()
+        local pages = BuildCatalogPage(SearchQuery)
+        if not pages or generation ~= SearchGeneration or CurrentTab ~= "Emotes" then
+            if generation == SearchGeneration then
+                StatusText.Text = "ERROR"
+                StatusDot.BackgroundColor3 = RED
+                EmptyText.Text = "Roblox catalog search failed."
+                EmptyText.Visible = true
+            end
+            return
+        end
+
+        -- AvatarEditorService exposes catalog pages and includes emote assets
+        -- whether or not the local player owns them.
+        for step = 2, pageNumber do
+            local ok = pcall(function()
+                if pages.IsFinished then return end
+                pages:AdvanceToNextPageAsync()
+            end)
+            if not ok then break end
+            if generation ~= SearchGeneration then return end
+        end
+
+        CurrentPagesObject = pages
+        CurrentPage = pageNumber
+        StatusText.Text = "CATALOG"
+        StatusDot.BackgroundColor3 = GREEN
+        RenderCatalogPages(pages, generation, pageNumber)
+    end)
+end
+
+local function NewSearch()
+    CurrentPage = 1
+    SearchQuery = Search.Text or ""
+    if CurrentTab == "Emotes" then
+        LoadCatalogPage(1)
+    end
+end
+
+--============================================================
+-- TAB / PAGE EVENTS
+--============================================================
+
+local function SelectTab(tab)
+    CurrentTab = tab
+
+    local emotesActive = tab == "Emotes"
+    TabEmotes.BackgroundColor3 = emotesActive and GLASS_2 or BLACK_2
+    TabFavorites.BackgroundColor3 = emotesActive and BLACK_2 or GLASS_2
+    TabEmotes.TextColor3 = emotesActive and WHITE or MUTED
+    TabFavorites.TextColor3 = emotesActive and MUTED or WHITE
+    EmoteTabStroke.Color = emotesActive and RED or DARK_RED
+    FavoriteTabStroke.Color = emotesActive and DARK_RED or RED
+
+    if tab == "Emotes" then
+        PrevPage.Visible = true
+        NextPage.Visible = true
+        NewSearch()
     else
-        pcall(function()
-            CurrentTrack:AdjustSpeed(Settings.Speed)
-        end)
+        RenderFavorites()
+    end
+end
 
-        PauseButton.Text = "II"
+TabEmotes.MouseButton1Click:Connect(function()
+    SelectTab("Emotes")
+end)
+
+TabFavorites.MouseButton1Click:Connect(function()
+    SelectTab("Favorites")
+end)
+
+Search.FocusLost:Connect(function(enterPressed)
+    if enterPressed or CurrentTab == "Emotes" then
+        SearchQuery = Search.Text or ""
+        CurrentPage = 1
+        LoadCatalogPage(1)
     end
 end)
 
-StopButton.MouseButton1Click:Connect(function()
+Search:GetPropertyChangedSignal("Text"):Connect(function()
+    if CurrentTab == "Favorites" then
+        RenderFavorites()
+    end
+end)
+
+PrevPage.MouseButton1Click:Connect(function()
+    if CurrentTab ~= "Emotes" or CurrentPage <= 1 then return end
+    LoadCatalogPage(CurrentPage - 1)
+end)
+
+NextPage.MouseButton1Click:Connect(function()
+    if CurrentTab ~= "Emotes" or not CurrentPagesObject then return end
+
+    local finished = false
+    pcall(function() finished = CurrentPagesObject.IsFinished end)
+    if finished then return end
+
+    LoadCatalogPage(CurrentPage + 1)
+end)
+
+--============================================================
+-- HUD CONTROLS
+--============================================================
+
+Minus.MouseButton1Click:Connect(function()
+    Settings.Speed = math.max(0.25, Settings.Speed - 0.25)
+    if CurrentTrack then pcall(function() CurrentTrack:AdjustSpeed(Settings.Speed) end) end
+    HudSpeed.Text = string.format("%.2fx", Settings.Speed)
+end)
+
+Plus.MouseButton1Click:Connect(function()
+    Settings.Speed = math.min(3, Settings.Speed + 0.25)
+    if CurrentTrack then pcall(function() CurrentTrack:AdjustSpeed(Settings.Speed) end) end
+    HudSpeed.Text = string.format("%.2fx", Settings.Speed)
+end)
+
+Loop.MouseButton1Click:Connect(function()
+    Settings.Looped = not Settings.Looped
+    Loop.BackgroundColor3 = Settings.Looped and RED or BLACK_2
+    if CurrentTrack then CurrentTrack.Looped = Settings.Looped end
+end)
+
+Pause.MouseButton1Click:Connect(function()
+    if not CurrentTrack then return end
+
+    if CurrentTrack.IsPlaying then
+        pcall(function() CurrentTrack:AdjustSpeed(0) end)
+        Pause.Text = "▶"
+    else
+        pcall(function() CurrentTrack:AdjustSpeed(Settings.Speed) end)
+        Pause.Text = "II"
+    end
+end)
+
+Stop.MouseButton1Click:Connect(function()
     StopEmote()
 end)
 
---//============================================================
---// MAIN WINDOW DRAG
---//============================================================
+--============================================================
+-- MAIN WINDOW DRAGGING
+--============================================================
 
 do
     local dragging = false
-    local dragStart
+    local startInput
     local startPosition
 
     Header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
-
             dragging = true
-            dragStart = input.Position
+            startInput = input.Position
             startPosition = Window.Position
-
-            local connection
-            connection = input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-
-                    if connection then
-                        connection:Disconnect()
-                    end
-                end
-            end)
         end
     end)
 
     UserInputService.InputChanged:Connect(function(input)
-        if not dragging then
-            return
-        end
+        if not dragging then return end
+        if input.UserInputType ~= Enum.UserInputType.MouseMovement
+            and input.UserInputType ~= Enum.UserInputType.Touch then return end
 
-        if input.UserInputType == Enum.UserInputType.MouseMovement
-            or input.UserInputType == Enum.UserInputType.Touch then
-
-            local delta = input.Position - dragStart
-
-            Window.Position = UDim2.new(
-                startPosition.X.Scale,
-                startPosition.X.Offset + delta.X,
-                startPosition.Y.Scale,
-                startPosition.Y.Offset + delta.Y
-            )
-        end
+        local delta = input.Position - startInput
+        Window.Position = UDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
     end)
-end
 
---//============================================================
---// SEPARATE TOGGLE BUTTON DRAG
---//============================================================
-
-do
-    local dragging = false
-    local moved = false
-    local dragStart
-    local startPosition
-
-    ToggleButton.InputBegan:Connect(function(input)
+    UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
-
-            dragging = true
-            moved = false
-            dragStart = input.Position
-            startPosition = ToggleButton.Position
-
-            local connection
-            connection = input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-
-                    if connection then
-                        connection:Disconnect()
-                    end
-                end
-            end)
+            dragging = false
         end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if not dragging then
-            return
-        end
-
-        if input.UserInputType == Enum.UserInputType.MouseMovement
-            or input.UserInputType == Enum.UserInputType.Touch then
-
-            local delta = input.Position - dragStart
-
-            if math.abs(delta.X) > 5 or math.abs(delta.Y) > 5 then
-                moved = true
-            end
-
-            ToggleButton.Position = UDim2.new(
-                startPosition.X.Scale,
-                startPosition.X.Offset + delta.X,
-                startPosition.Y.Scale,
-                startPosition.Y.Offset + delta.Y
-            )
-        end
-    end)
-
-    ToggleButton.MouseButton1Click:Connect(function()
-        if moved then
-            moved = false
-            return
-        end
-
-        MainGui.Enabled = not MainGui.Enabled
     end)
 end
 
---//============================================================
---// CHARACTER SAFETY
---//============================================================
+--============================================================
+-- SEPARATE DRAGGABLE SAIKI TOGGLE
+--============================================================
+
+local Toggle = New("TextButton", {
+    Name = "SaikiToggle",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.new(0, 48, 0.5, 0),
+    Size = UDim2.fromOffset(42, 42),
+    BackgroundColor3 = BLACK,
+    BackgroundTransparency = 0.12,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Font = BOLD,
+    Text = "S",
+    TextSize = 17,
+    TextColor3 = WHITE,
+    ZIndex = 100,
+}, ToggleGui)
+Corner(Toggle, 11)
+MovingBorder(Toggle, 1.5)
+TextGradient(Toggle)
+
+local toggleDragging = false
+local toggleMoved = false
+local toggleStart
+local togglePosition
+
+Toggle.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        toggleDragging = true
+        toggleMoved = false
+        toggleStart = input.Position
+        togglePosition = Toggle.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if not toggleDragging then return end
+    if input.UserInputType ~= Enum.UserInputType.MouseMovement
+        and input.UserInputType ~= Enum.UserInputType.Touch then return end
+
+    local delta = input.Position - toggleStart
+    if math.abs(delta.X) > 5 or math.abs(delta.Y) > 5 then
+        toggleMoved = true
+    end
+
+    Toggle.Position = UDim2.new(
+        togglePosition.X.Scale,
+        togglePosition.X.Offset + delta.X,
+        togglePosition.Y.Scale,
+        togglePosition.Y.Offset + delta.Y
+    )
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        toggleDragging = false
+    end
+end)
+
+Toggle.MouseButton1Click:Connect(function()
+    if toggleMoved then
+        toggleMoved = false
+        return
+    end
+    MainGui.Enabled = not MainGui.Enabled
+end)
+
+--============================================================
+-- CHARACTER SAFETY / START
+--============================================================
 
 Player.CharacterAdded:Connect(function()
-    task.wait(0.5)
+    task.wait(0.35)
     StopEmote()
 end)
 
---//============================================================
---// INITIALISE
---//============================================================
-
-SelectTab("Emotes")
 MainGui.Enabled = true
 Hud.Visible = false
-UpdateHudText()
+Loop.BackgroundColor3 = RED
+SelectTab("Emotes")
