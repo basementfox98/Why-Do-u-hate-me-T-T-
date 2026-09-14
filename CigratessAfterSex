@@ -200,6 +200,27 @@ end
 
 LoadFavorites()
 
+local function LoadSettings()
+    pcall(function()
+        if readfile and isfile and isfile(SETTINGS_FILE) then
+            local data = HttpService:JSONDecode(readfile(SETTINGS_FILE))
+            if type(data) == "table" then
+                if tonumber(data.Speed) then Settings.Speed = math.clamp(tonumber(data.Speed), 0.25, 3) end
+                if data.Looped ~= nil then Settings.Looped = data.Looped == true end
+                if data.StopOnMovement ~= nil then Settings.StopOnMovement = data.StopOnMovement == true end
+                if data.ShowHUD ~= nil then Settings.ShowHUD = data.ShowHUD == true end
+                if data.Notifications ~= nil then Settings.Notifications = data.Notifications == true end
+            end
+        end
+    end)
+end
+local function SaveSettings()
+    pcall(function()
+        if writefile then writefile(SETTINGS_FILE, HttpService:JSONEncode(Settings)) end
+    end)
+end
+LoadSettings()
+
 local function IsFavorite(id)
     return FavoritesSet[id] == true
 end
@@ -512,8 +533,8 @@ local Tabs = New("Frame", {
 }, Glass)
 
 local TabEmotes = New("TextButton", {
-    Position = UDim2.fromOffset(8, 4),
-    Size = UDim2.new(0.5, -12, 0, 28),
+    Position = UDim2.fromOffset(6, 4),
+    Size = UDim2.new(0.3333, -8, 0, 28),
     BackgroundColor3 = GLASS_2,
     BackgroundTransparency = 0.02,
     BorderSizePixel = 0,
@@ -529,8 +550,8 @@ local EmoteTabStroke = Stroke(TabEmotes, RED, 1)
 TextGradient(TabEmotes)
 
 local TabFavorites = New("TextButton", {
-    Position = UDim2.new(0.5, 4, 0, 4),
-    Size = UDim2.new(0.5, -12, 0, 28),
+    Position = UDim2.new(0.3333, 2, 0, 4),
+    Size = UDim2.new(0.3333, -8, 0, 28),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.18,
     BorderSizePixel = 0,
@@ -543,6 +564,186 @@ local TabFavorites = New("TextButton", {
 }, Tabs)
 Corner(TabFavorites, 8)
 local FavoriteTabStroke = Stroke(TabFavorites, DARK_RED, 1)
+
+local TabSettings = New("TextButton", {
+    Position = UDim2.new(0.6666, -2, 0, 4),
+    Size = UDim2.new(0.3333, -8, 0, 28),
+    BackgroundColor3 = BLACK_2,
+    BackgroundTransparency = 0.18,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Font = BOLD,
+    Text = "SETTINGS",
+    TextSize = 9,
+    TextColor3 = MUTED,
+    ZIndex = 21,
+}, Tabs)
+Corner(TabSettings, 8)
+local SettingsTabStroke = Stroke(TabSettings, DARK_RED, 1)
+
+--============================================================
+-- SETTINGS CONTENT
+--============================================================
+
+local SettingsScroll = New("ScrollingFrame", {
+    Position = UDim2.fromOffset(10, 50),
+    Size = UDim2.new(1, -20, 1, -92),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 3,
+    ScrollBarImageColor3 = RED,
+    ScrollingDirection = Enum.ScrollingDirection.Y,
+    CanvasSize = UDim2.fromOffset(0, 0),
+    Visible = false,
+    ZIndex = 6,
+}, Glass)
+
+local SettingsList = New("UIListLayout", {
+    Padding = UDim.new(0, 7),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+}, SettingsScroll)
+
+local SettingsHeader = New("TextLabel", {
+    Size = UDim2.new(1, -4, 0, 22),
+    BackgroundTransparency = 1,
+    Font = BOLD,
+    Text = "EMOTE SETTINGS",
+    TextSize = 11,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextColor3 = WHITE,
+    LayoutOrder = 1,
+    ZIndex = 7,
+}, SettingsScroll)
+TextGradient(SettingsHeader)
+
+local function MakeSettingRow(title, description, order)
+    local row = New("Frame", {
+        Size = UDim2.new(1, -4, 0, 44),
+        BackgroundColor3 = BLACK_2,
+        BackgroundTransparency = 0.12,
+        BorderSizePixel = 0,
+        LayoutOrder = order,
+        ZIndex = 7,
+    }, SettingsScroll)
+    Corner(row, 9)
+    Stroke(row, Color3.fromRGB(67, 27, 36), 1)
+    local titleLabel = New("TextLabel", {
+        Position = UDim2.fromOffset(10, 5),
+        Size = UDim2.new(1, -92, 0, 15),
+        BackgroundTransparency = 1,
+        Font = BOLD,
+        Text = title,
+        TextSize = 9,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextColor3 = WHITE,
+        ZIndex = 8,
+    }, row)
+    TextGradient(titleLabel)
+    New("TextLabel", {
+        Position = UDim2.fromOffset(10, 21),
+        Size = UDim2.new(1, -92, 0, 14),
+        BackgroundTransparency = 1,
+        Font = FONT,
+        Text = description,
+        TextSize = 7,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextColor3 = MUTED,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ZIndex = 8,
+    }, row)
+    return row
+end
+
+local function MakeSettingToggle(row, value, callback)
+    local button = New("TextButton", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -9, 0.5, 0),
+        Size = UDim2.fromOffset(56, 25),
+        BackgroundColor3 = value and RED or GLASS_2,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        Font = BOLD,
+        Text = value and "ON" or "OFF",
+        TextSize = 8,
+        TextColor3 = WHITE,
+        ZIndex = 9,
+    }, row)
+    Corner(button, 7)
+    Stroke(button, value and BRIGHT_RED or DARK_RED, 1)
+    button.MouseButton1Click:Connect(function()
+        value = not value
+        button.Text = value and "ON" or "OFF"
+        button.BackgroundColor3 = value and RED or GLASS_2
+        callback(value)
+    end)
+    return button
+end
+
+local SpeedRow = MakeSettingRow("Playback Speed", "Default speed for new emotes.", 2)
+local SpeedValue = New("TextLabel", {
+    AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -9, 0.5, 0),
+    Size = UDim2.fromOffset(50, 24), BackgroundTransparency = 1, Font = BOLD,
+    Text = string.format("%.2fx", Settings.Speed), TextSize = 9, TextColor3 = WHITE, ZIndex = 8,
+}, SpeedRow)
+local SpeedMinus = New("TextButton", {Position=UDim2.new(1,-105,0.5,-12),Size=UDim2.fromOffset(24,24),BackgroundColor3=BLACK,BorderSizePixel=0,AutoButtonColor=false,Font=BOLD,Text="−",TextSize=13,TextColor3=WHITE,ZIndex=9}, SpeedRow)
+local SpeedPlus = New("TextButton", {Position=UDim2.new(1,-76,0.5,-12),Size=UDim2.fromOffset(24,24),BackgroundColor3=BLACK,BorderSizePixel=0,AutoButtonColor=false,Font=BOLD,Text="+",TextSize=13,TextColor3=WHITE,ZIndex=9}, SpeedRow)
+Corner(SpeedMinus, 6); Corner(SpeedPlus, 6)
+local function ChangeSettingsSpeed(delta)
+    Settings.Speed = math.clamp(math.round((Settings.Speed + delta) * 4) / 4, 0.25, 3)
+    SpeedValue.Text = string.format("%.2fx", Settings.Speed)
+    HudSpeed.Text = string.format("%.2fx", Settings.Speed)
+    if CurrentTrack then pcall(function() CurrentTrack:AdjustSpeed(Settings.Speed) end) end
+    SaveSettings()
+end
+SpeedMinus.MouseButton1Click:Connect(function() ChangeSettingsSpeed(-0.25) end)
+SpeedPlus.MouseButton1Click:Connect(function() ChangeSettingsSpeed(0.25) end)
+
+local LoopRow = MakeSettingRow("Loop Emotes", "Keep an emote playing continuously.", 3)
+local LoopSettingToggle = MakeSettingToggle(LoopRow, Settings.Looped, function(v)
+    Settings.Looped = v
+    Loop.BackgroundColor3 = v and RED or BLACK_2
+    if CurrentTrack then CurrentTrack.Looped = v end
+    SaveSettings()
+end)
+
+local MoveRow = MakeSettingRow("Stop on Movement", "Stop the emote when your character moves.", 4)
+local MoveSettingToggle = MakeSettingToggle(MoveRow, Settings.StopOnMovement, function(v)
+    Settings.StopOnMovement = v
+    SaveSettings()
+end)
+
+local HudRow = MakeSettingRow("Show Playback HUD", "Show the speed, pause, loop and stop controls.", 5)
+local HudSettingToggle = MakeSettingToggle(HudRow, Settings.ShowHUD, function(v)
+    Settings.ShowHUD = v
+    Hud.Visible = v and CurrentTrack ~= nil
+    SaveSettings()
+end)
+
+local NotifyRow = MakeSettingRow("Notifications", "Show a small message when an emote starts.", 6)
+local NotifySettingToggle = MakeSettingToggle(NotifyRow, Settings.Notifications, function(v)
+    Settings.Notifications = v
+    SaveSettings()
+end)
+
+local ResetRow = MakeSettingRow("Reset Settings", "Restore all Saiki Emotes settings to defaults.", 7)
+local ResetSettingsButton = New("TextButton", {
+    AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -9, 0.5, 0),
+    Size = UDim2.fromOffset(65, 25), BackgroundColor3 = RED, BorderSizePixel = 0,
+    AutoButtonColor = false, Font = BOLD, Text = "RESET", TextSize = 8, TextColor3 = WHITE, ZIndex = 9,
+}, ResetRow)
+Corner(ResetSettingsButton, 7)
+ResetSettingsButton.MouseButton1Click:Connect(function()
+    Settings.Speed = 1; Settings.Looped = true; Settings.StopOnMovement = false; Settings.ShowHUD = true; Settings.Notifications = true
+    SpeedValue.Text = "1.00x"
+    if CurrentTrack then CurrentTrack.Looped = true; pcall(function() CurrentTrack:AdjustSpeed(1) end) end
+    Loop.BackgroundColor3 = RED
+    SaveSettings()
+end)
+
+SettingsList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    SettingsScroll.CanvasSize = UDim2.fromOffset(0, SettingsList.AbsoluteContentSize.Y + 8)
+end)
+
 
 --============================================================
 -- HUD
@@ -799,7 +1000,13 @@ local function PlayEmote(emote)
 
         HudName.Text = emote.name
         HudSpeed.Text = string.format("%.2fx", Settings.Speed)
-        Hud.Visible = true
+        Hud.Visible = Settings.ShowHUD
+
+        if Settings.Notifications then
+            pcall(function()
+                game:GetService("StarterGui"):SetCore("SendNotification", {Title = "Saiki Emotes", Text = "Playing: " .. tostring(emote.name), Duration = 2})
+            end)
+        end
 
         TrackConnection = RunService.Heartbeat:Connect(function()
             if not CurrentTrack or CurrentTrack ~= track then return end
@@ -1228,6 +1435,10 @@ TabFavorites.MouseButton1Click:Connect(function()
     SelectTab("Favorites")
 end)
 
+TabSettings.MouseButton1Click:Connect(function()
+    SelectTab("Settings")
+end)
+
 Search.FocusLost:Connect(function(enterPressed)
     if enterPressed or CurrentTab == "Emotes" then
         SearchQuery = Search.Text or ""
@@ -1417,5 +1628,5 @@ end)
 
 MainGui.Enabled = true
 Hud.Visible = false
-Loop.BackgroundColor3 = RED
+Loop.BackgroundColor3 = Settings.Looped and RED or BLACK_2
 SelectTab("Emotes")
