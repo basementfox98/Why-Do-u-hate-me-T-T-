@@ -41,56 +41,62 @@ end
 --============================================================
 
 local ThemeDefinitions = {
-    ["Saiki Red"] = {
-        BLACK = Color3.fromRGB(5, 5, 7), BLACK_2 = Color3.fromRGB(10, 8, 11),
-        GLASS = Color3.fromRGB(24, 14, 18), GLASS_2 = Color3.fromRGB(35, 16, 21),
-        HIGHLIGHT = Color3.fromRGB(70, 42, 47), ACCENT = Color3.fromRGB(235, 42, 62),
-        BRIGHT = Color3.fromRGB(255, 58, 78), DARK = Color3.fromRGB(92, 18, 29),
-        WHITE = Color3.fromRGB(250, 247, 249), SOFT = Color3.fromRGB(222, 218, 221),
-        MUTED = Color3.fromRGB(150, 140, 145), STAR = Color3.fromRGB(125, 117, 122),
+    -- Blood: deep black glass with a rich crimson/red accent.
+    ["Blood"] = {
+        BLACK = Color3.fromRGB(4, 4, 6), BLACK_2 = Color3.fromRGB(10, 7, 9),
+        GLASS = Color3.fromRGB(20, 10, 14), GLASS_2 = Color3.fromRGB(30, 13, 19),
+        HIGHLIGHT = Color3.fromRGB(68, 28, 36), ACCENT = Color3.fromRGB(220, 28, 48),
+        BRIGHT = Color3.fromRGB(255, 62, 82), DARK = Color3.fromRGB(104, 18, 32),
+        WHITE = Color3.fromRGB(255, 250, 251), SOFT = Color3.fromRGB(232, 222, 225),
+        MUTED = Color3.fromRGB(151, 137, 142), STAR = Color3.fromRGB(111, 100, 105),
     },
-    ["White Black"] = {
-        BLACK = Color3.fromRGB(4, 4, 5), BLACK_2 = Color3.fromRGB(12, 12, 13),
-        GLASS = Color3.fromRGB(235, 235, 238), GLASS_2 = Color3.fromRGB(218, 218, 222),
-        HIGHLIGHT = Color3.fromRGB(255, 255, 255), ACCENT = Color3.fromRGB(245, 245, 248),
-        BRIGHT = Color3.fromRGB(255, 255, 255), DARK = Color3.fromRGB(145, 145, 150),
-        WHITE = Color3.fromRGB(250, 250, 252), SOFT = Color3.fromRGB(220, 220, 224),
-        MUTED = Color3.fromRGB(105, 105, 112), STAR = Color3.fromRGB(125, 125, 132),
+    -- Snow: clean monochrome white/black, with no leftover red tint.
+    ["Snow"] = {
+        BLACK = Color3.fromRGB(9, 9, 11), BLACK_2 = Color3.fromRGB(18, 18, 21),
+        GLASS = Color3.fromRGB(238, 238, 242), GLASS_2 = Color3.fromRGB(221, 221, 226),
+        HIGHLIGHT = Color3.fromRGB(255, 255, 255), ACCENT = Color3.fromRGB(28, 28, 32),
+        BRIGHT = Color3.fromRGB(70, 70, 76), DARK = Color3.fromRGB(4, 4, 6),
+        WHITE = Color3.fromRGB(252, 252, 255), SOFT = Color3.fromRGB(220, 220, 225),
+        MUTED = Color3.fromRGB(104, 104, 112), STAR = Color3.fromRGB(135, 135, 142),
     },
-    ["Green Black"] = {
-        BLACK = Color3.fromRGB(4, 7, 6), BLACK_2 = Color3.fromRGB(8, 13, 11),
-        GLASS = Color3.fromRGB(13, 28, 21), GLASS_2 = Color3.fromRGB(16, 42, 28),
-        HIGHLIGHT = Color3.fromRGB(34, 72, 52), ACCENT = Color3.fromRGB(55, 220, 120),
-        BRIGHT = Color3.fromRGB(92, 255, 155), DARK = Color3.fromRGB(18, 105, 57),
-        WHITE = Color3.fromRGB(245, 255, 249), SOFT = Color3.fromRGB(215, 235, 223),
-        MUTED = Color3.fromRGB(140, 158, 148), STAR = Color3.fromRGB(105, 130, 115),
+    -- Hacker: near-black with a vivid terminal green.
+    ["Hacker"] = {
+        BLACK = Color3.fromRGB(3, 6, 4), BLACK_2 = Color3.fromRGB(7, 13, 9),
+        GLASS = Color3.fromRGB(9, 24, 15), GLASS_2 = Color3.fromRGB(12, 37, 22),
+        HIGHLIGHT = Color3.fromRGB(26, 70, 42), ACCENT = Color3.fromRGB(0, 218, 104),
+        BRIGHT = Color3.fromRGB(72, 255, 145), DARK = Color3.fromRGB(0, 112, 54),
+        WHITE = Color3.fromRGB(242, 255, 247), SOFT = Color3.fromRGB(207, 232, 215),
+        MUTED = Color3.fromRGB(123, 157, 133), STAR = Color3.fromRGB(86, 125, 99),
     },
-    ["Baby Pink White"] = {
-        BLACK = Color3.fromRGB(255, 250, 252), BLACK_2 = Color3.fromRGB(255, 246, 249),
-        GLASS = Color3.fromRGB(255, 239, 245), GLASS_2 = Color3.fromRGB(255, 228, 237),
-        HIGHLIGHT = Color3.fromRGB(255, 255, 255), ACCENT = Color3.fromRGB(245, 145, 180),
-        BRIGHT = Color3.fromRGB(255, 175, 204), DARK = Color3.fromRGB(205, 100, 140),
-        WHITE = Color3.fromRGB(35, 28, 31), SOFT = Color3.fromRGB(70, 58, 63),
-        MUTED = Color3.fromRGB(125, 105, 113), STAR = Color3.fromRGB(150, 125, 135),
+    -- Lovely: soft baby pink and white, with dark rose text for contrast.
+    ["Lovely"] = {
+        BLACK = Color3.fromRGB(255, 251, 253), BLACK_2 = Color3.fromRGB(255, 246, 250),
+        GLASS = Color3.fromRGB(255, 239, 246), GLASS_2 = Color3.fromRGB(255, 228, 238),
+        HIGHLIGHT = Color3.fromRGB(255, 255, 255), ACCENT = Color3.fromRGB(235, 126, 164),
+        BRIGHT = Color3.fromRGB(255, 171, 202), DARK = Color3.fromRGB(184, 79, 119),
+        WHITE = Color3.fromRGB(53, 34, 43), SOFT = Color3.fromRGB(93, 68, 78),
+        MUTED = Color3.fromRGB(137, 109, 121), STAR = Color3.fromRGB(173, 129, 145),
     },
-    ["Midnight Blue Black"] = {
-        BLACK = Color3.fromRGB(3, 5, 10), BLACK_2 = Color3.fromRGB(7, 10, 18),
-        GLASS = Color3.fromRGB(10, 18, 34), GLASS_2 = Color3.fromRGB(14, 27, 50),
-        HIGHLIGHT = Color3.fromRGB(28, 47, 78), ACCENT = Color3.fromRGB(70, 125, 235),
-        BRIGHT = Color3.fromRGB(105, 160, 255), DARK = Color3.fromRGB(30, 65, 130),
-        WHITE = Color3.fromRGB(244, 248, 255), SOFT = Color3.fromRGB(211, 220, 236),
-        MUTED = Color3.fromRGB(135, 148, 170), STAR = Color3.fromRGB(105, 120, 145),
+    -- Aurora: white/black base with an animated turquoise gradient.
+    ["Aurora"] = {
+        BLACK = Color3.fromRGB(5, 7, 8), BLACK_2 = Color3.fromRGB(12, 15, 16),
+        GLASS = Color3.fromRGB(238, 246, 246), GLASS_2 = Color3.fromRGB(222, 235, 235),
+        HIGHLIGHT = Color3.fromRGB(255, 255, 255), ACCENT = Color3.fromRGB(40, 224, 207),
+        BRIGHT = Color3.fromRGB(115, 255, 238), DARK = Color3.fromRGB(16, 129, 123),
+        WHITE = Color3.fromRGB(250, 255, 255), SOFT = Color3.fromRGB(220, 239, 237),
+        MUTED = Color3.fromRGB(104, 130, 131), STAR = Color3.fromRGB(125, 157, 156),
     },
 }
 
-local ThemeOrder = {"Saiki Red", "White Black", "Green Black", "Baby Pink White", "Midnight Blue Black"}
-local CurrentThemeName = "Saiki Red"
+local ThemeOrder = {"Blood", "Snow", "Hacker", "Lovely", "Aurora"}
+
+local CurrentThemeName = "Blood"
 
 local BLACK, BLACK_2, GLASS, GLASS_2, GLASS_HIGHLIGHT
 local RED, BRIGHT_RED, DARK_RED, WHITE, SOFT_WHITE, MUTED, STAR_OFF
 
 local function SetThemeColors(name)
-    local t = ThemeDefinitions[name] or ThemeDefinitions["Saiki Red"]
+    local t = ThemeDefinitions[name] or ThemeDefinitions["Blood"]
     CurrentThemeName = name
     BLACK, BLACK_2, GLASS, GLASS_2 = t.BLACK, t.BLACK_2, t.GLASS, t.GLASS_2
     GLASS_HIGHLIGHT = t.HIGHLIGHT
@@ -116,7 +122,7 @@ local Settings = {
     StopOnMovement = false,
     Notifications = true,
     CopyEmoteEnabled = false,
-    Theme = "Saiki Red",
+    Theme = "Blood",
 }
 
 local Favorites = {}
@@ -353,27 +359,64 @@ local function ApplyTheme(name)
     for _, item in ipairs(ThemeStrokes) do
         if item.object and item.object.Parent then item.object.Color = C(item.role) end
     end
+    local aurora = CurrentThemeName == "Aurora"
     for _, g in ipairs(ThemeTextGradients) do
         if g and g.Parent then
-            g.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, t.WHITE),
-                ColorSequenceKeypoint.new(0.52, t.SOFT),
-                ColorSequenceKeypoint.new(1, t.ACCENT),
-            })
+            if aurora then
+                g.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, t.WHITE),
+                    ColorSequenceKeypoint.new(0.35, t.SOFT),
+                    ColorSequenceKeypoint.new(0.68, t.ACCENT),
+                    ColorSequenceKeypoint.new(1, t.WHITE),
+                })
+            else
+                g.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, t.WHITE),
+                    ColorSequenceKeypoint.new(0.52, t.SOFT),
+                    ColorSequenceKeypoint.new(1, t.ACCENT),
+                })
+            end
         end
     end
     for _, g in ipairs(ThemeBorderGradients) do
         if g and g.Parent then
-            g.Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, t.BLACK),
-                ColorSequenceKeypoint.new(0.30, t.BRIGHT),
-                ColorSequenceKeypoint.new(0.50, t.BLACK),
-                ColorSequenceKeypoint.new(0.72, t.BRIGHT),
-                ColorSequenceKeypoint.new(1, t.BLACK),
-            })
+            if aurora then
+                g.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, t.BLACK),
+                    ColorSequenceKeypoint.new(0.22, t.ACCENT),
+                    ColorSequenceKeypoint.new(0.42, t.WHITE),
+                    ColorSequenceKeypoint.new(0.62, t.BRIGHT),
+                    ColorSequenceKeypoint.new(0.82, t.ACCENT),
+                    ColorSequenceKeypoint.new(1, t.BLACK),
+                })
+            else
+                g.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, t.BLACK),
+                    ColorSequenceKeypoint.new(0.30, t.BRIGHT),
+                    ColorSequenceKeypoint.new(0.50, t.BLACK),
+                    ColorSequenceKeypoint.new(0.72, t.BRIGHT),
+                    ColorSequenceKeypoint.new(1, t.BLACK),
+                })
+            end
         end
     end
 end
+
+-- Subtle animated gradient for Aurora. One lightweight loop drives the registered gradients.
+task.spawn(function()
+    while true do
+        task.wait(0.045)
+        if CurrentThemeName == "Aurora" then
+            for _, g in ipairs(ThemeTextGradients) do
+                if g and g.Parent then g.Offset = Vector2.new((os.clock() * 0.16) % 2 - 1, 0) end
+            end
+        else
+            for _, g in ipairs(ThemeTextGradients) do
+                if g and g.Parent and g.Offset ~= Vector2.zero then g.Offset = Vector2.zero end
+            end
+        end
+    end
+end)
 
 --============================================================
 -- GUI ROOT
@@ -401,7 +444,7 @@ local Window = New("Frame", {
     Name = "Window",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(470, 335),
+    Size = UDim2.fromOffset(480, 342),
     BackgroundColor3 = BLACK,
     BackgroundTransparency = 0.16,
     BorderSizePixel = 0,
@@ -436,7 +479,7 @@ Corner(GlassHighlight, 12)
 
 local Header = New("Frame", {
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.new(1, 0, 0, 44),
+    Size = UDim2.new(1, 0, 0, 47),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.18,
     BorderSizePixel = 0,
@@ -487,7 +530,7 @@ local Subtitle = New("TextLabel", {
 
 local ThemeButton = New("TextButton", {
     Name = "ThemeButton",
-    Position = UDim2.new(1, -78, 0.5, -15),
+    Position = UDim2.new(1, -80, 0.5, -15),
     Size = UDim2.fromOffset(30, 30),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.05,
@@ -504,7 +547,7 @@ Stroke(ThemeButton, DARK_RED, 2)
 
 local AnchorButton = New("TextButton", {
     Name = "AnchorButton",
-    Position = UDim2.new(1, -42, 0.5, -15),
+    Position = UDim2.new(1, -43, 0.5, -15),
     Size = UDim2.fromOffset(30, 30),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.05,
@@ -517,14 +560,14 @@ local AnchorButton = New("TextButton", {
     ZIndex = 8,
 }, Header)
 Corner(AnchorButton, 15)
-Stroke(AnchorButton, Color3.fromRGB(75, 30, 40), 2)
+Stroke(AnchorButton, DARK_RED, 2)
 
 --============================================================
 -- SEARCH
 --============================================================
 
 local SearchHolder = New("Frame", {
-    Position = UDim2.fromOffset(10, 50),
+    Position = UDim2.fromOffset(10, 53),
     Size = UDim2.new(1, -20, 0, 25),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.28,
@@ -532,7 +575,7 @@ local SearchHolder = New("Frame", {
     ZIndex = 5,
 }, Glass)
 Corner(SearchHolder, 8)
-Stroke(SearchHolder, Color3.fromRGB(67, 27, 36), 1)
+Stroke(SearchHolder, GLASS_HIGHLIGHT, 1)
 
 New("TextLabel", {
     Position = UDim2.fromOffset(9, 0),
@@ -565,11 +608,11 @@ local Search = New("TextBox", {
 --============================================================
 
 local GridHolder = New("ScrollingFrame", {
-    Position = UDim2.fromOffset(10, 78),
-    Size = UDim2.new(1, -20, 0, 215),
+    Position = UDim2.fromOffset(10, 81),
+    Size = UDim2.new(1, -20, 0, 218),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
-    CanvasSize = UDim2.fromOffset(450, 222),
+    CanvasSize = UDim2.fromOffset(460, 225),
     ScrollBarThickness = 3,
     ScrollBarImageColor3 = RED,
     ScrollingDirection = Enum.ScrollingDirection.Y,
@@ -579,14 +622,14 @@ local GridHolder = New("ScrollingFrame", {
 local Grid = New("Frame", {
     Name = "EmoteGrid",
     Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.fromOffset(450, 195),
+    Size = UDim2.fromOffset(460, 198),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     ZIndex = 4,
 }, GridHolder)
 
 local GridLayout = New("UIGridLayout", {
-    CellSize = UDim2.fromOffset(90, 65),
+    CellSize = UDim2.fromOffset(92, 66),
     CellPadding = UDim2.fromOffset(0, 0),
     FillDirection = Enum.FillDirection.Horizontal,
     FillDirectionMaxCells = 5,
@@ -611,8 +654,8 @@ TextGradient(EmptyText)
 -- Pagination is part of the scrolling content, directly after row 3.
 -- It becomes visible naturally when the user scrolls to the bottom of the list.
 local PageArea = New("Frame", {
-    Position = UDim2.fromOffset(0, 195),
-    Size = UDim2.fromOffset(450, 27),
+    Position = UDim2.fromOffset(0, 198),
+    Size = UDim2.fromOffset(460, 27),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     ZIndex = 15,
@@ -766,7 +809,7 @@ local function MakeSettingRow(title, description, order, height)
         ZIndex = 7,
     }, SettingsScroll)
     Corner(row, 9)
-    Stroke(row, Color3.fromRGB(67, 27, 36), 1)
+    Stroke(row, GLASS_HIGHLIGHT, 1)
 
     local titleLabel = New("TextLabel", {
         Position = UDim2.fromOffset(10, 5),
@@ -1473,10 +1516,11 @@ local function CreateCard(emote, order)
         ColorSequenceKeypoint.new(1, BLACK),
     })
     cardGradient.Parent = cardStroke
+    table.insert(ThemeBorderGradients, cardGradient)
 
     local Cover = New("ImageButton", {
         Position = UDim2.fromOffset(3, 3),
-        Size = UDim2.fromOffset(84, 39),
+        Size = UDim2.fromOffset(86, 40),
         BackgroundColor3 = GLASS_2,
         BackgroundTransparency = 0.18,
         BorderSizePixel = 0,
@@ -1486,10 +1530,10 @@ local function CreateCard(emote, order)
         ZIndex = 6,
     }, Card)
     Corner(Cover, 7)
-    Stroke(Cover, Color3.fromRGB(77, 28, 36), 1)
+    Stroke(Cover, GLASS_HIGHLIGHT, 1)
 
     local Name = New("TextLabel", {
-        Position = UDim2.fromOffset(3, 43),
+        Position = UDim2.fromOffset(3, 44),
         Size = UDim2.new(1, -6, 0, 10),
         BackgroundTransparency = 1,
         Font = BOLD,
@@ -1988,7 +2032,7 @@ local Toggle = New("TextButton", {
     ZIndex = 100,
 }, ToggleGui)
 Corner(Toggle, 11)
-Stroke(Toggle, Color3.fromRGB(90, 90, 90), 2.5)
+Stroke(Toggle, GLASS_HIGHLIGHT, 2.5)
 
 local ToggleImage = New("ImageLabel", {
     Name = "SaikiBrandImage",
