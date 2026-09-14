@@ -40,17 +40,66 @@ end
 -- THEME
 --============================================================
 
-local BLACK = Color3.fromRGB(5, 5, 7)
-local BLACK_2 = Color3.fromRGB(10, 8, 11)
-local GLASS = Color3.fromRGB(24, 14, 18)
-local GLASS_2 = Color3.fromRGB(35, 16, 21)
-local RED = Color3.fromRGB(235, 42, 62)
-local BRIGHT_RED = Color3.fromRGB(255, 58, 78)
-local DARK_RED = Color3.fromRGB(92, 18, 29)
-local WHITE = Color3.fromRGB(250, 247, 249)
-local SOFT_WHITE = Color3.fromRGB(222, 218, 221)
-local MUTED = Color3.fromRGB(150, 140, 145)
-local STAR_OFF = Color3.fromRGB(125, 117, 122)
+local ThemeDefinitions = {
+    ["Saiki Red"] = {
+        BLACK = Color3.fromRGB(5, 5, 7), BLACK_2 = Color3.fromRGB(10, 8, 11),
+        GLASS = Color3.fromRGB(24, 14, 18), GLASS_2 = Color3.fromRGB(35, 16, 21),
+        HIGHLIGHT = Color3.fromRGB(70, 42, 47), ACCENT = Color3.fromRGB(235, 42, 62),
+        BRIGHT = Color3.fromRGB(255, 58, 78), DARK = Color3.fromRGB(92, 18, 29),
+        WHITE = Color3.fromRGB(250, 247, 249), SOFT = Color3.fromRGB(222, 218, 221),
+        MUTED = Color3.fromRGB(150, 140, 145), STAR = Color3.fromRGB(125, 117, 122),
+    },
+    ["White Black"] = {
+        BLACK = Color3.fromRGB(4, 4, 5), BLACK_2 = Color3.fromRGB(12, 12, 13),
+        GLASS = Color3.fromRGB(235, 235, 238), GLASS_2 = Color3.fromRGB(218, 218, 222),
+        HIGHLIGHT = Color3.fromRGB(255, 255, 255), ACCENT = Color3.fromRGB(245, 245, 248),
+        BRIGHT = Color3.fromRGB(255, 255, 255), DARK = Color3.fromRGB(145, 145, 150),
+        WHITE = Color3.fromRGB(250, 250, 252), SOFT = Color3.fromRGB(220, 220, 224),
+        MUTED = Color3.fromRGB(105, 105, 112), STAR = Color3.fromRGB(125, 125, 132),
+    },
+    ["Green Black"] = {
+        BLACK = Color3.fromRGB(4, 7, 6), BLACK_2 = Color3.fromRGB(8, 13, 11),
+        GLASS = Color3.fromRGB(13, 28, 21), GLASS_2 = Color3.fromRGB(16, 42, 28),
+        HIGHLIGHT = Color3.fromRGB(34, 72, 52), ACCENT = Color3.fromRGB(55, 220, 120),
+        BRIGHT = Color3.fromRGB(92, 255, 155), DARK = Color3.fromRGB(18, 105, 57),
+        WHITE = Color3.fromRGB(245, 255, 249), SOFT = Color3.fromRGB(215, 235, 223),
+        MUTED = Color3.fromRGB(140, 158, 148), STAR = Color3.fromRGB(105, 130, 115),
+    },
+    ["Baby Pink White"] = {
+        BLACK = Color3.fromRGB(255, 250, 252), BLACK_2 = Color3.fromRGB(255, 246, 249),
+        GLASS = Color3.fromRGB(255, 239, 245), GLASS_2 = Color3.fromRGB(255, 228, 237),
+        HIGHLIGHT = Color3.fromRGB(255, 255, 255), ACCENT = Color3.fromRGB(245, 145, 180),
+        BRIGHT = Color3.fromRGB(255, 175, 204), DARK = Color3.fromRGB(205, 100, 140),
+        WHITE = Color3.fromRGB(35, 28, 31), SOFT = Color3.fromRGB(70, 58, 63),
+        MUTED = Color3.fromRGB(125, 105, 113), STAR = Color3.fromRGB(150, 125, 135),
+    },
+    ["Midnight Blue Black"] = {
+        BLACK = Color3.fromRGB(3, 5, 10), BLACK_2 = Color3.fromRGB(7, 10, 18),
+        GLASS = Color3.fromRGB(10, 18, 34), GLASS_2 = Color3.fromRGB(14, 27, 50),
+        HIGHLIGHT = Color3.fromRGB(28, 47, 78), ACCENT = Color3.fromRGB(70, 125, 235),
+        BRIGHT = Color3.fromRGB(105, 160, 255), DARK = Color3.fromRGB(30, 65, 130),
+        WHITE = Color3.fromRGB(244, 248, 255), SOFT = Color3.fromRGB(211, 220, 236),
+        MUTED = Color3.fromRGB(135, 148, 170), STAR = Color3.fromRGB(105, 120, 145),
+    },
+}
+
+local ThemeOrder = {"Saiki Red", "White Black", "Green Black", "Baby Pink White", "Midnight Blue Black"}
+local CurrentThemeName = "Saiki Red"
+
+local BLACK, BLACK_2, GLASS, GLASS_2, GLASS_HIGHLIGHT
+local RED, BRIGHT_RED, DARK_RED, WHITE, SOFT_WHITE, MUTED, STAR_OFF
+
+local function SetThemeColors(name)
+    local t = ThemeDefinitions[name] or ThemeDefinitions["Saiki Red"]
+    CurrentThemeName = name
+    BLACK, BLACK_2, GLASS, GLASS_2 = t.BLACK, t.BLACK_2, t.GLASS, t.GLASS_2
+    GLASS_HIGHLIGHT = t.HIGHLIGHT
+    RED, BRIGHT_RED, DARK_RED = t.ACCENT, t.BRIGHT, t.DARK
+    WHITE, SOFT_WHITE, MUTED, STAR_OFF = t.WHITE, t.SOFT, t.MUTED, t.STAR
+end
+
+SetThemeColors(CurrentThemeName)
+
 local GREEN = Color3.fromRGB(70, 220, 125)
 
 local FONT = Enum.Font.Gotham
@@ -67,6 +116,7 @@ local Settings = {
     StopOnMovement = false,
     Notifications = true,
     CopyEmoteEnabled = false,
+    Theme = "Saiki Red",
 }
 
 local Favorites = {}
@@ -96,9 +146,43 @@ local SAVE_FILE = "SaikiEmotes_Favorites.json"
 -- HELPERS
 --============================================================
 
+-- Theme-aware UI registry
+local ThemeObjects = {}
+local ThemeStrokes = {}
+local ThemeTextGradients = {}
+local ThemeBorderGradients = {}
+
+local function SameColor(a, b)
+    return a and b and a.R == b.R and a.G == b.G and a.B == b.B
+end
+
+local function ColorRole(color)
+    local t = ThemeDefinitions[CurrentThemeName]
+    if SameColor(color, t.BLACK) then return "BLACK" end
+    if SameColor(color, t.BLACK_2) then return "BLACK_2" end
+    if SameColor(color, t.GLASS) then return "GLASS" end
+    if SameColor(color, t.GLASS_2) then return "GLASS_2" end
+    if SameColor(color, t.HIGHLIGHT) then return "HIGHLIGHT" end
+    if SameColor(color, t.ACCENT) then return "ACCENT" end
+    if SameColor(color, t.BRIGHT) then return "BRIGHT" end
+    if SameColor(color, t.DARK) then return "DARK" end
+    if SameColor(color, t.WHITE) then return "WHITE" end
+    if SameColor(color, t.SOFT) then return "SOFT" end
+    if SameColor(color, t.MUTED) then return "MUTED" end
+    if SameColor(color, t.STAR) then return "STAR" end
+end
+
 local function New(className, props, parent)
     local object = Instance.new(className)
     for k, v in pairs(props or {}) do object[k] = v end
+    if props and props.BackgroundColor3 then
+        local role = ColorRole(props.BackgroundColor3)
+        if role then table.insert(ThemeObjects, {object = object, property = "BackgroundColor3", role = role}) end
+    end
+    if props and props.TextColor3 then
+        local role = ColorRole(props.TextColor3)
+        if role then table.insert(ThemeObjects, {object = object, property = "TextColor3", role = role}) end
+    end
     if parent then object.Parent = parent end
     return object
 end
@@ -116,6 +200,8 @@ local function Stroke(object, color, thickness)
     s.Thickness = thickness or 1
     s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     s.Parent = object
+    local role = ColorRole(s.Color)
+    if role then table.insert(ThemeStrokes, {object = s, role = role}) end
     return s
 end
 
@@ -127,6 +213,7 @@ local function TextGradient(object)
         ColorSequenceKeypoint.new(1, RED),
     })
     g.Parent = object
+    table.insert(ThemeTextGradients, g)
     return g
 end
 
@@ -141,6 +228,7 @@ local function MovingBorder(object, thickness)
         ColorSequenceKeypoint.new(1, BLACK),
     })
     gradient.Parent = stroke
+    table.insert(ThemeBorderGradients, gradient)
 
     task.spawn(function()
         while object.Parent and stroke.Parent do
@@ -216,6 +304,7 @@ local function LoadSettings()
                 if data.StopOnMovement ~= nil then Settings.StopOnMovement = data.StopOnMovement == true end
                 if data.Notifications ~= nil then Settings.Notifications = data.Notifications == true end
                 if data.CopyEmoteEnabled ~= nil then Settings.CopyEmoteEnabled = data.CopyEmoteEnabled == true end
+                if type(data.Theme) == "string" and ThemeDefinitions[data.Theme] then Settings.Theme = data.Theme end
             end
         end
     end)
@@ -226,6 +315,7 @@ local function SaveSettings()
     end)
 end
 LoadSettings()
+SetThemeColors(Settings.Theme)
 
 local function IsFavorite(id)
     return FavoritesSet[id] == true
@@ -249,6 +339,40 @@ local function ToggleFavorite(id)
     end
 
     SaveFavorites()
+end
+
+local function ApplyTheme(name)
+    SetThemeColors(name)
+    local t = ThemeDefinitions[CurrentThemeName]
+    local function C(role) return t[role] end
+    for _, item in ipairs(ThemeObjects) do
+        if item.object and item.object.Parent then
+            item.object[item.property] = C(item.role)
+        end
+    end
+    for _, item in ipairs(ThemeStrokes) do
+        if item.object and item.object.Parent then item.object.Color = C(item.role) end
+    end
+    for _, g in ipairs(ThemeTextGradients) do
+        if g and g.Parent then
+            g.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, t.WHITE),
+                ColorSequenceKeypoint.new(0.52, t.SOFT),
+                ColorSequenceKeypoint.new(1, t.ACCENT),
+            })
+        end
+    end
+    for _, g in ipairs(ThemeBorderGradients) do
+        if g and g.Parent then
+            g.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, t.BLACK),
+                ColorSequenceKeypoint.new(0.30, t.BRIGHT),
+                ColorSequenceKeypoint.new(0.50, t.BLACK),
+                ColorSequenceKeypoint.new(0.72, t.BRIGHT),
+                ColorSequenceKeypoint.new(1, t.BLACK),
+            })
+        end
+    end
 end
 
 --============================================================
@@ -300,7 +424,7 @@ Corner(Glass, 13)
 local GlassHighlight = New("Frame", {
     Position = UDim2.fromOffset(1, 1),
     Size = UDim2.new(1, -2, 0, 54),
-    BackgroundColor3 = Color3.fromRGB(70, 42, 47),
+    BackgroundColor3 = GLASS_HIGHLIGHT,
     BackgroundTransparency = 0.78,
     BorderSizePixel = 0,
 }, Glass)
@@ -360,6 +484,23 @@ local Subtitle = New("TextLabel", {
     TextColor3 = MUTED,
     ZIndex = 7,
 }, Header)
+
+local ThemeButton = New("TextButton", {
+    Name = "ThemeButton",
+    Position = UDim2.new(1, -78, 0.5, -15),
+    Size = UDim2.fromOffset(30, 30),
+    BackgroundColor3 = BLACK_2,
+    BackgroundTransparency = 0.05,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Font = BOLD,
+    Text = "◐",
+    TextSize = 16,
+    TextColor3 = WHITE,
+    ZIndex = 8,
+}, Header)
+Corner(ThemeButton, 15)
+Stroke(ThemeButton, DARK_RED, 2)
 
 local AnchorButton = New("TextButton", {
     Name = "AnchorButton",
@@ -740,11 +881,11 @@ local LanguageValue = New("TextLabel", {
     Text = "ENGLISH", TextSize = 8, TextColor3 = WHITE, ZIndex = 8,
 }, InfoRow)
 
-local ThemeRow = MakeSettingRow("Theme", "Saiki Red glass theme. VEX themes are not copied because Saiki uses its own fixed visual style.", 8, 50)
+local ThemeRow = MakeSettingRow("Theme", "Use the top-right theme button to cycle Saiki themes.", 8, 50)
 local ThemeValue = New("TextLabel", {
     AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -9, 0.5, 0),
     Size = UDim2.fromOffset(62, 24), BackgroundTransparency = 1, Font = BOLD,
-    Text = "SAIKI RED", TextSize = 8, TextColor3 = RED, ZIndex = 8,
+    Text = string.upper(Settings.Theme), TextSize = 8, TextColor3 = RED, ZIndex = 8,
 }, ThemeRow)
 
 local ResetRow = MakeSettingRow("Reset Settings", "Restore all configurable Saiki Emotes settings to their defaults.", 9)
@@ -1769,6 +1910,20 @@ local function UpdateAnchorButton()
     AnchorButton.BackgroundColor3 = GuiAnchored and RED or BLACK_2
 end
 
+local function UpdateThemeValue()
+    if ThemeValue then ThemeValue.Text = string.upper(CurrentThemeName) end
+end
+
+ThemeButton.MouseButton1Click:Connect(function()
+    local index = table.find(ThemeOrder, CurrentThemeName) or 1
+    index = index % #ThemeOrder + 1
+    ApplyTheme(ThemeOrder[index])
+    UpdateAnchorButton()
+    Settings.Theme = CurrentThemeName
+    UpdateThemeValue()
+    SaveSettings()
+end)
+
 AnchorButton.MouseButton1Click:Connect(function()
     GuiAnchored = not GuiAnchored
     UpdateAnchorButton()
@@ -1846,6 +2001,32 @@ local ToggleImage = New("ImageLabel", {
 }, Toggle)
 Corner(ToggleImage, 9)
 
+-- GitHub image: Roblox itself does not accept arbitrary GitHub URLs as ImageLabel
+-- content, so when running in an executor we download the file and expose it as a
+-- custom asset. If those executor APIs are unavailable, use the Roblox brand asset
+-- as a safe fallback rather than showing a broken image.
+local RequestedToggleImage = "https://raw.githubusercontent.com/SaikiWithTheBanHammer/ScriptBlox/main/SaikiBlackandWhite.jpg"
+local ToggleImageFallback = "rbxthumb://type=Asset&id=6379534047&w=420&h=420"
+ToggleImage.Image = ToggleImageFallback
+
+task.spawn(function()
+    local getter = getcustomasset or getsynasset
+    if type(writefile) == "function" and type(getter) == "function" then
+        local path = "SaikiEmotes_SaikiBlackandWhite.jpg"
+        local ok, data = pcall(function() return game:HttpGet(RequestedToggleImage) end)
+        if ok and type(data) == "string" and #data > 100 then
+            local wrote = pcall(function() writefile(path, data) end)
+            if wrote then
+                local assetOk, asset = pcall(function() return getter(path) end)
+                if assetOk and type(asset) == "string" and asset ~= "" then
+                    ToggleImage.Image = asset
+                    return
+                end
+            end
+        end
+    end
+end)
+
 local toggleDragging = false
 local toggleMoved = false
 local toggleStart
@@ -1912,6 +2093,7 @@ end)
 MainGui.Enabled = true
 Hud.Visible = false
 UpdateAnchorButton()
+UpdateThemeValue()
 Loop.BackgroundColor3 = Settings.Looped and RED or BLACK_2
 SelectTab("Emotes")
 
