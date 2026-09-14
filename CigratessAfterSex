@@ -426,8 +426,8 @@ local GridPadding = New("UIPadding", {
 
 -- 5 columns x 2 rows = exactly 10 cards visible in the compact window.
 local GridLayout = New("UIGridLayout", {
-    CellSize = UDim2.fromOffset(87, 89),
-    CellPadding = UDim2.fromOffset(5, 5),
+    CellSize = UDim2.fromOffset(85, 85),
+    CellPadding = UDim2.fromOffset(4, 4),
     FillDirection = Enum.FillDirection.Horizontal,
     FillDirectionMaxCells = 5,
     SortOrder = Enum.SortOrder.LayoutOrder,
@@ -815,7 +815,7 @@ end
 local function CreateCard(emote, order)
     local Card = New("Frame", {
         Name = "EmoteCard",
-        Size = UDim2.fromOffset(87, 89),
+        Size = UDim2.fromOffset(85, 85),
         BackgroundColor3 = BLACK_2,
         BackgroundTransparency = 0.14,
         BorderSizePixel = 0,
@@ -847,7 +847,7 @@ local function CreateCard(emote, order)
 
     local Cover = New("ImageButton", {
         Position = UDim2.fromOffset(4, 4),
-        Size = UDim2.fromOffset(79, 58),
+        Size = UDim2.fromOffset(77, 53),
         BackgroundColor3 = GLASS_2,
         BackgroundTransparency = 0.18,
         BorderSizePixel = 0,
@@ -860,8 +860,8 @@ local function CreateCard(emote, order)
     Stroke(Cover, Color3.fromRGB(77, 28, 36), 1)
 
     local Name = New("TextLabel", {
-        Position = UDim2.fromOffset(4, 62),
-        Size = UDim2.new(1, -8, 0, 14),
+        Position = UDim2.fromOffset(4, 58),
+        Size = UDim2.new(1, -8, 0, 13),
         BackgroundTransparency = 1,
         Font = BOLD,
         Text = emote.name,
@@ -877,7 +877,7 @@ local function CreateCard(emote, order)
 
     local Favorite = New("TextButton", {
         AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 1, -13),
+        Position = UDim2.new(0.5, 0, 1, -12),
         Size = UDim2.fromOffset(24, 12),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
