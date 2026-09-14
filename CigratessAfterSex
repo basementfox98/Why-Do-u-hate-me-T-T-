@@ -788,15 +788,15 @@ end)
 
 local Hud = New("Frame", {
     Name = "EmoteControlHUD",
-    AnchorPoint = Vector2.new(0.5, 1),
-    Position = UDim2.new(0.5, 0, 0, -8),
+    AnchorPoint = Vector2.new(0.5, 0),
+    Position = UDim2.new(0.5, 0, 1, 7),
     Size = UDim2.fromOffset(330, 48),
     BackgroundColor3 = BLACK,
     BackgroundTransparency = 0.12,
     BorderSizePixel = 0,
     Visible = false,
     ZIndex = 50,
-}, MainGui)
+}, Window)
 Corner(Hud, 10)
 MovingBorder(Hud, 1.5)
 
