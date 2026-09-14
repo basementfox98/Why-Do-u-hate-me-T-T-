@@ -331,7 +331,7 @@ local TitleIcon = New("ImageLabel", {
     Position = UDim2.fromOffset(11, 7),
     Size = UDim2.fromOffset(28, 28),
     BackgroundTransparency = 1,
-    Image = "rbxassetid://6379534047",
+    Image = "rbxthumb://type=Asset&id=6379534047&w=420&h=420",
     ScaleType = Enum.ScaleType.Fit,
     ZIndex = 7,
 }, Header)
@@ -370,8 +370,8 @@ local AnchorButton = New("TextButton", {
     BorderSizePixel = 0,
     AutoButtonColor = false,
     Font = BOLD,
-    Text = "ANCHOR",
-    TextSize = 7,
+    Text = "🔓",
+    TextSize = 14,
     TextColor3 = WHITE,
     ZIndex = 8,
 }, Header)
@@ -1765,7 +1765,7 @@ end)
 local GuiAnchored = false
 
 local function UpdateAnchorButton()
-    AnchorButton.Text = GuiAnchored and "ANCHORED" or "ANCHOR"
+    AnchorButton.Text = GuiAnchored and "🔒" or "🔓"
     AnchorButton.BackgroundColor3 = GuiAnchored and RED or BLACK_2
 end
 
