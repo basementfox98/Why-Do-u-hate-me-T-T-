@@ -1,4 +1,4 @@
--- SAIKI EMOTES V40 — STABLE BASE
+-- SAIKI EMOTES V49 — PLAYER EMOTE COPY + DARK MODE
 -- Reliable staged boot: compile/run the core in its own chunk, report any error, then remove the boot panel.
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
@@ -198,7 +198,6 @@ local State = {
     SelectedFriend = nil,
 
     GradientTime = 0,
-    ThemeIndex = 1,
 }
 
 local PAGE_SIZE = 10
@@ -601,39 +600,17 @@ end
 loadSaved()
 
 --==============================================================
--- FRIEND FEATURES
+-- FRIEND FEATURES • LOCAL PLAYER EMOTE COPY
 --==============================================================
--- Client-only limitation:
--- Roblox does not expose a general client-to-client friend-emote request
--- transport. These controls therefore use the local server-friend list,
--- inspect a friend's currently playing animation, and create a shareable
--- request code instead of inventing a RemoteEvent/Firebase protocol.
+-- Uses the same client-side technique as Infinite Yield's copyanimation:
+-- inspect the target player's currently replicated animation tracks and
+-- load the target Animation object directly onto our Humanoid.
+-- No Firebase, authentication, RemoteEvent, or external service is needed.
 local renderFriends
 local FriendsList
 
-local function isServerFriend(other)
-    if not other or other == player then return false end
-    local ok,result = pcall(function()
-        return player:IsFriendsWith(other.UserId)
-    end)
-    return ok and result == true
-end
-
-local function getFriendPlayers()
-    local result = {}
-    for _,other in ipairs(Players:GetPlayers()) do
-        if isServerFriend(other) then
-            table.insert(result,other)
-        end
-    end
-    table.sort(result,function(a,b)
-        return tostring(a.DisplayName):lower() < tostring(b.DisplayName):lower()
-    end)
-    return result
-end
-
-local function getFriendCurrentAnimation(other)
-    if not other or not other.Character then return nil end
+local function getPlayerEmoteTrack(other)
+    if not other or other == player or not other.Character then return nil end
     local humanoid = other.Character:FindFirstChildOfClass("Humanoid")
     if not humanoid then return nil end
 
@@ -641,16 +618,23 @@ local function getFriendCurrentAnimation(other)
     pcall(function()
         for _,track in ipairs(humanoid:GetPlayingAnimationTracks()) do
             local animation = track.Animation
-            local id = animation and numericId(animation.AnimationId)
-            if id and track.IsPlaying then
-                if not best or track.Priority.Value > best.Priority.Value then
-                    best = {
-                        Id = id,
-                        Name = "Friend Emote",
-                        TimePosition = tonumber(track.TimePosition) or 0,
-                        Length = tonumber(track.Length) or 0,
-                        Priority = track.Priority,
-                    }
+            local animationId = animation and tostring(animation.AnimationId or "") or ""
+            if track.IsPlaying and animation and animationId ~= "" then
+                -- Ignore common Roblox default movement/idle animation tracks.
+                if not string.find(animationId,"507768375",1,true)
+                    and not string.find(animationId,"180435571",1,true) then
+                    local priorityValue = 0
+                    pcall(function() priorityValue = track.Priority.Value end)
+                    if not best or priorityValue > best.PriorityValue then
+                        best = {
+                            Track = track,
+                            Animation = animation,
+                            AnimationId = animationId,
+                            PriorityValue = priorityValue,
+                            Speed = tonumber(track.Speed) or 1,
+                            TimePosition = tonumber(track.TimePosition) or 0,
+                        }
+                    end
                 end
             end
         end
@@ -658,48 +642,95 @@ local function getFriendCurrentAnimation(other)
     return best
 end
 
-local function playFriendSnapshot(other, syncPosition)
-    local snap = getFriendCurrentAnimation(other)
-    if not snap then
-        toast("No playable animation found")
+local function copyPlayerEmote(other)
+    if not other or other == player then
+        toast("Select another player")
         return false
     end
 
-    local ok = playEmote(snap.Id, tostring(other.DisplayName) .. " • Friend Emote")
-    if not ok then return false end
+    local snapshot = getPlayerEmoteTrack(other)
+    if not snapshot then
+        toast(tostring(other.DisplayName) .. " is not playing a copyable emote")
+        return false
+    end
 
-    if syncPosition ~= false then
-        task.defer(function()
-            local track = State.CurrentTrack
-            if track and snap.Length > 0 then
-                pcall(function()
-                    track.TimePosition = math.clamp(snap.TimePosition / snap.Length,0,1) * track.Length
-                end)
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then
+        toast("Your character is not ready")
+        return false
+    end
+
+    local loaded
+    local ok = pcall(function()
+        -- This mirrors the reliable client-side Infinite Yield technique:
+        -- LoadAnimation(targetTrack.Animation), then preserve speed/time.
+        loaded = humanoid:LoadAnimation(snapshot.Animation)
+        loaded.Priority = snapshot.Track.Priority
+        loaded:Play(0.1,1,snapshot.Speed)
+        if snapshot.TimePosition > 0 then
+            loaded.TimePosition = snapshot.TimePosition
+        end
+    end)
+
+    if not ok or not loaded then
+        toast("Could not copy " .. tostring(other.DisplayName) .. "'s emote")
+        return false
+    end
+
+    -- Stop the previous tracks after the new animation has successfully loaded.
+    pcall(function()
+        for _,track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+            if track ~= loaded then
+                local animationId = track.Animation and tostring(track.Animation.AnimationId or "") or ""
+                if animationId == "" or not string.find(animationId,"507768375",1,true) then
+                    track:Stop(0.1)
+                end
+            end
+        end
+    end)
+
+    State.SelectedFriend = other.UserId
+    addRecent({
+        Id = numericId(snapshot.AnimationId),
+        AssetId = numericId(snapshot.AnimationId),
+        Name = tostring(other.DisplayName) .. " • Copied Emote",
+    })
+    toast("Copied " .. tostring(other.DisplayName) .. "'s emote")
+
+    -- If the target stops their track, stop our copied track too.
+    task.spawn(function()
+        pcall(function()
+            snapshot.Track.Stopped:Wait()
+            if loaded and loaded.IsPlaying then
+                loaded:Stop(0.12)
             end
         end)
-    end
-    addRecent({Id=snap.Id,AssetId=snap.Id,Name=tostring(other.DisplayName) .. " • Friend Emote"})
+    end)
     return true
-end
-
-local function copyFriendRequest(other)
-    local snap = getFriendCurrentAnimation(other)
-    if not snap then
-        toast("Friend is not playing an emote")
-        return
-    end
-
-    local requestCode = "SAIKI_EMOTE_REQUEST|" .. tostring(other.UserId) .. "|" .. tostring(snap.Id)
-    if safeSetClipboard(requestCode) then
-        toast("Friend request code copied")
-    else
-        toast("Request code • " .. tostring(snap.Id))
-    end
 end
 
 local function setFriendSetting(key,value)
     State.FriendSettings[key] = value == true
     saveData()
+end
+
+local function getAllPlayers()
+    local result = {}
+    for _,other in ipairs(Players:GetPlayers()) do
+        if other ~= player then
+            table.insert(result,other)
+        end
+    end
+    table.sort(result,function(a,b)
+        local ad = tostring(a.DisplayName):lower()
+        local bd = tostring(b.DisplayName):lower()
+        if ad == bd then
+            return tostring(a.Name):lower() < tostring(b.Name):lower()
+        end
+        return ad < bd
+    end)
+    return result
 end
 
 local function renderFriends()
@@ -709,21 +740,20 @@ local function renderFriends()
         if child:IsA("Frame") then child:Destroy() end
     end
 
-    local friends = getFriendPlayers()
+    local players = getAllPlayers()
     local count = 0
 
-    for _,other in ipairs(friends) do
+    for _,other in ipairs(players) do
         count += 1
-
         local row = create("Frame", {
             Size = UDim2.new(1,-12,0,58),
-            BackgroundColor3 = State.Dark and Color3.fromRGB(31,27,36) or Color3.fromRGB(251,248,253),
+            BackgroundColor3 = State.Dark and Color3.fromRGB(22,18,30) or Color3.fromRGB(251,248,253),
             BorderSizePixel = 0,
             LayoutOrder = count,
             ZIndex = 6,
         }, FriendsList)
         corner(row,10)
-        stroke(row,Color3.fromRGB(220,205,230),1,0.18)
+        stroke(row,State.Dark and Color3.fromRGB(101,67,126) or Color3.fromRGB(220,205,230),1,0.18)
 
         local avatar = create("ImageLabel", {
             Size = UDim2.fromOffset(42,42),
@@ -736,11 +766,11 @@ local function renderFriends()
         corner(avatar,21)
 
         local name = create("TextLabel", {
-            Size = UDim2.new(1,-210,0,18),
-            Position = UDim2.fromOffset(57,6),
+            Size = UDim2.new(1,-150,0,18),
+            Position = UDim2.fromOffset(57,7),
             BackgroundTransparency = 1,
             Text = tostring(other.DisplayName),
-            TextColor3 = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(65,55,75),
+            TextColor3 = State.Dark and Color3.fromRGB(250,239,255) or Color3.fromRGB(65,55,75),
             Font = Enum.Font.GothamBold,
             TextSize = 9,
             TextXAlignment = Enum.TextXAlignment.Left,
@@ -749,11 +779,11 @@ local function renderFriends()
         }, row)
 
         local username = create("TextLabel", {
-            Size = UDim2.new(1,-210,0,15),
-            Position = UDim2.fromOffset(57,24),
+            Size = UDim2.new(1,-150,0,15),
+            Position = UDim2.fromOffset(57,25),
             BackgroundTransparency = 1,
             Text = "@" .. tostring(other.Name),
-            TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),
+            TextColor3 = State.Dark and Color3.fromRGB(181,157,198) or Color3.fromRGB(130,120,140),
             Font = Enum.Font.Gotham,
             TextSize = 7,
             TextXAlignment = Enum.TextXAlignment.Left,
@@ -761,59 +791,39 @@ local function renderFriends()
             ZIndex = 7,
         }, row)
 
-        local snapshot = getFriendCurrentAnimation(other)
+        local snapshot = getPlayerEmoteTrack(other)
         local status = create("TextLabel", {
-            Size = UDim2.new(1,-210,0,13),
-            Position = UDim2.fromOffset(57,39),
+            Size = UDim2.new(1,-150,0,13),
+            Position = UDim2.fromOffset(57,40),
             BackgroundTransparency = 1,
-            Text = snapshot and "Playing an animation" or "Not playing an emote",
-            TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(130,120,140),
+            Text = snapshot and "EMOTE ACTIVE • READY TO COPY" or "NO EMOTE DETECTED",
+            TextColor3 = snapshot
+                and (State.Dark and Color3.fromRGB(224,171,218) or Color3.fromRGB(151,94,140))
+                or (State.Dark and Color3.fromRGB(135,123,146) or Color3.fromRGB(130,120,140)),
             Font = Enum.Font.GothamMedium,
             TextSize = 6.5,
             TextXAlignment = Enum.TextXAlignment.Left,
             ZIndex = 7,
         }, row)
 
-        local play = makeButton(row,"PLAY",UDim2.new(1,-145,0,8),UDim2.fromOffset(43,20))
-        play.TextSize = 6.5
-        play.ZIndex = 8
-        local sync = makeButton(row,"SYNC",UDim2.new(1,-97,0,8),UDim2.fromOffset(43,20))
-        sync.TextSize = 6.5
-        sync.ZIndex = 8
-        local request = makeButton(row,"REQ",UDim2.new(1,-49,0,8),UDim2.fromOffset(43,20))
-        request.TextSize = 6.5
-        request.ZIndex = 8
-
-        play.MouseButton1Click:Connect(function()
-            State.SelectedFriend = other.UserId
-            playFriendSnapshot(other,false)
-        end)
-
-        sync.MouseButton1Click:Connect(function()
-            State.SelectedFriend = other.UserId
-            if State.FriendSettings.SyncEmote then
-                playFriendSnapshot(other,true)
-            else
-                toast("Friend sync is disabled")
-            end
-        end)
-
-        request.MouseButton1Click:Connect(function()
-            State.SelectedFriend = other.UserId
-            copyFriendRequest(other)
+        local copy = makeButton(row,"COPY EMOTE",UDim2.new(1,-91,0,17),UDim2.fromOffset(82,24))
+        copy.TextSize = 6.5
+        copy.ZIndex = 8
+        copy.MouseButton1Click:Connect(function()
+            copyPlayerEmote(other)
         end)
     end
 
+    local empty = FriendsList.Parent:FindFirstChild("FriendsEmpty")
     if count == 0 then
-        local empty = FriendsList.Parent:FindFirstChild("FriendsEmpty")
         if not empty then
             empty = create("TextLabel", {
                 Name = "FriendsEmpty",
                 Size = UDim2.new(1,-20,0,50),
                 Position = UDim2.new(0,10,0.5,-25),
                 BackgroundTransparency = 1,
-                Text = "No friends are currently in this server.",
-                TextColor3 = State.Dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(115,105,125),
+                Text = "No other players are currently in this server.",
+                TextColor3 = State.Dark and Color3.fromRGB(167,145,180) or Color3.fromRGB(115,105,125),
                 Font = Enum.Font.GothamBold,
                 TextSize = 11,
                 TextWrapped = true,
@@ -822,631 +832,13 @@ local function renderFriends()
             }, FriendsList.Parent)
         end
         empty.Visible = true
-    else
-        local empty = FriendsList.Parent:FindFirstChild("FriendsEmpty")
-        if empty then empty.Visible = false end
+    elseif empty then
+        empty.Visible = false
     end
 end
 
 --==============================================================
--- GUI
---==============================================================
-local Gui = create("ScreenGui", {
-    Name = "SAIKI_EMOTES_GUI",
-    ResetOnSpawn = false,
-    IgnoreGuiInset = true,
-    DisplayOrder = 60,
-    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-}, UIParent)
-
-local Main = create("Frame", {
-    Name = "Main",
-    Size = UDim2.fromOffset(500, 350),
-    Position = UDim2.fromScale(0.5, 0.5),
-    AnchorPoint = Vector2.new(0.5, 0.5),
-    BackgroundColor3 = Color3.fromRGB(248,245,255),
-    BorderSizePixel = 0,
-    Active = true,
-    ClipsDescendants = true,
-}, Gui)
-corner(Main, 18)
-local MainStroke = stroke(Main, Color3.fromRGB(220,205,230), 1.4, 0.12)
-
-local Gradient = create("UIGradient", {
-    Rotation = 25,
-    Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255,220,238)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(232,220,255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(218,248,238)),
-    }),
-}, Main)
-
--- V48: lightweight built-in themes. No extra network calls or polling.
-local Themes = {
-    {Name="Sakura Dream",Dark=false,Colors={Color3.fromRGB(255,220,238),Color3.fromRGB(232,220,255),Color3.fromRGB(218,248,238)}},
-    {Name="Ocean Pulse",Dark=false,Colors={Color3.fromRGB(205,245,255),Color3.fromRGB(215,225,255),Color3.fromRGB(205,255,238)}},
-    {Name="Sunset Glow",Dark=false,Colors={Color3.fromRGB(255,225,205),Color3.fromRGB(255,210,235),Color3.fromRGB(230,215,255)}},
-    {Name="Aurora",Dark=true,Colors={Color3.fromRGB(40,70,75),Color3.fromRGB(65,50,95),Color3.fromRGB(35,85,75)}},
-    {Name="Midnight",Dark=true,Colors={Color3.fromRGB(30,40,75),Color3.fromRGB(55,35,90),Color3.fromRGB(35,65,100)}},
-    {Name="Cherry Noir",Dark=true,Colors={Color3.fromRGB(80,28,48),Color3.fromRGB(55,28,65),Color3.fromRGB(95,35,45)}},
-}
-
-local function getTheme()
-    local theme = Themes[State.ThemeIndex] or Themes[1]
-    State.Dark = theme.Dark
-    return theme
-end
-
-local Scale = create("UIScale", {}, Main)
-
-local function updateScale()
-    local cam = workspace.CurrentCamera
-    if not cam then return end
-    local v = cam.ViewportSize
-    Scale.Scale = math.clamp(math.min(v.X/620, v.Y/440), 0.72, 1)
-end
-updateScale()
-pcall(function()
-    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
-end)
-
--- Header
-local Header = create("Frame", {
-    Size = UDim2.new(1,-20,0,52),
-    Position = UDim2.fromOffset(10,8),
-    BackgroundTransparency = 1,
-    Active = true,
-    ZIndex = 10,
-}, Main)
-
-local Logo = create("ImageLabel", {
-    Size = UDim2.fromOffset(22,22),
-    Position = UDim2.fromOffset(20,5),
-    BackgroundTransparency = 1,
-    Image = "rbxthumb://type=Asset&id=6379534047&w=150&h=150",
-    ScaleType = Enum.ScaleType.Fit,
-    ZIndex = 12,
-}, Header)
-corner(Logo, 11)
-
-local Title = create("TextLabel", {
-    Size = UDim2.fromOffset(220,24),
-    Position = UDim2.fromOffset(48,4),
-    BackgroundTransparency = 1,
-    Text = "SAIKI EMOTES",
-    Font = Enum.Font.GothamBold,
-    TextSize = 19,
-    TextColor3 = Color3.fromRGB(53,49,67),
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 11,
-}, Header)
-
-local Subtitle = create("TextLabel", {
-    Size = UDim2.fromOffset(240,18),
-    Position = UDim2.fromOffset(49,27),
-    BackgroundTransparency = 1,
-    Text = "GAZE • SAIKI EDITION",
-    Font = Enum.Font.GothamMedium,
-    TextSize = 9,
-    TextColor3 = Color3.fromRGB(116,108,130),
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 11,
-}, Header)
-
-local SOCIAL_INSTAGRAM_URL = "https://www.instagram.com/saiki_hu_lol/"
-local SOCIAL_DISCORD_URL = "https://discord.gg/eWC3CSxkQM"
-local SOCIAL_INSTAGRAM_REMOTE = "https://raw.githubusercontent.com/thedevilondiscord/Why-Do-u-hate-me-T-T-/main/icons8-instagram-48.png"
-local SOCIAL_DISCORD_REMOTE = "https://raw.githubusercontent.com/thedevilondiscord/Why-Do-u-hate-me-T-T-/main/dx.jpg"
-
-local function getRequestFunction()
-    if syn and type(syn.request) == "function" then return syn.request end
-    if http and type(http.request) == "function" then return http.request end
-    if type(http_request) == "function" then return http_request end
-    if type(request) == "function" then return request end
-end
-
-local function loadRemoteImage(url, fileName)
-    local requestFn = getRequestFunction()
-    local getAsset = getcustomasset or getsynasset
-    if not requestFn or type(writefile) ~= "function" or type(getAsset) ~= "function" then
-        return nil
-    end
-
-    local ok, response = pcall(function()
-        return requestFn({Url = url, Method = "GET"})
-    end)
-    if not ok or not response or type(response.Body) ~= "string" or #response.Body == 0 then
-        return nil
-    end
-
-    local path = fileName
-    local wrote = pcall(function()
-        if type(isfile) == "function" and isfile(path) and type(delfile) == "function" then
-            delfile(path)
-        end
-        writefile(path, response.Body)
-    end)
-    if not wrote then return nil end
-
-    local okAsset, asset = pcall(function() return getAsset(path) end)
-    if okAsset and type(asset) == "string" and asset ~= "" then
-        return asset
-    end
-    return nil
-end
-
-local SOCIAL_INSTAGRAM_IMAGE
-local SOCIAL_DISCORD_IMAGE
-
-local function makeSocialButton(name, image, x)
-    local button = create("ImageButton", {
-        Name = name,
-        Position = UDim2.fromOffset(x,4),
-        Size = UDim2.fromOffset(24,24),
-        BackgroundColor3 = Color3.fromRGB(255,255,255),
-        BackgroundTransparency = 0.10,
-        BorderSizePixel = 0,
-        AutoButtonColor = true,
-        Image = image or "",
-        ScaleType = Enum.ScaleType.Fit,
-        ZIndex = 13,
-        Active = true,
-    }, Header)
-    corner(button,8)
-    stroke(button,Color3.fromRGB(215,180,205),1,0.18)
-    return button
-end
-
-local InstagramButton = makeSocialButton("InstagramButton", nil, 180)
-local DiscordButton = makeSocialButton("DiscordButton", nil, 208)
-
--- Never block GUI startup on GitHub/executor HTTP. Load the two icons in the background.
-task.spawn(function()
-    SOCIAL_INSTAGRAM_IMAGE = loadRemoteImage(SOCIAL_INSTAGRAM_REMOTE, "saiki_instagram_icon.png")
-    if SOCIAL_INSTAGRAM_IMAGE and InstagramButton and InstagramButton.Parent then
-        InstagramButton.Image = SOCIAL_INSTAGRAM_IMAGE
-    end
-end)
-
-task.spawn(function()
-    SOCIAL_DISCORD_IMAGE = loadRemoteImage(SOCIAL_DISCORD_REMOTE, "saiki_discord_cover.jpg")
-    if SOCIAL_DISCORD_IMAGE and DiscordButton and DiscordButton.Parent then
-        DiscordButton.Image = SOCIAL_DISCORD_IMAGE
-    end
-end)
-
-local function copySocialLink(url, label)
-    local fn = setclipboard or toclipboard or set_clipboard
-    local copied = false
-
-    if type(fn) == "function" then
-        copied = pcall(fn, url)
-    elseif syn and type(syn.write_clipboard) == "function" then
-        copied = pcall(syn.write_clipboard, url)
-    end
-
-    if copied then
-        toast("Copied " .. label .. " link")
-    end
-end
-
-InstagramButton.MouseButton1Click:Connect(function()
-    copySocialLink(SOCIAL_INSTAGRAM_URL, "Instagram")
-end)
-
-DiscordButton.MouseButton1Click:Connect(function()
-    copySocialLink(SOCIAL_DISCORD_URL, "Discord")
-end)
-
-local function makeButton(parent, text, position, size)
-    local b = create("TextButton", {
-        Size = size,
-        Position = position,
-        BackgroundColor3 = Color3.fromRGB(255,248,253),
-        BorderSizePixel = 0,
-        Text = text,
-        TextColor3 = Color3.fromRGB(55,47,65),
-        Font = Enum.Font.GothamBold,
-        TextSize = 11,
-        AutoButtonColor = true,
-        Active = true,
-        ZIndex = 12,
-    }, parent)
-    corner(b, 9)
-    stroke(b, Color3.fromRGB(215,195,225), 1, 0.2)
-    return b
-end
-
-local AnchorButton = makeButton(Header,"🔓",UDim2.new(1,-96,0,10),UDim2.fromOffset(26,26))
-local ThemeButton = makeButton(Header,"🌙",UDim2.new(1,-64,0,10),UDim2.fromOffset(26,26))
-local CloseButton = makeButton(Header,"×",UDim2.new(1,-32,0,10),UDim2.fromOffset(26,26))
-
---==============================================================
--- DRAGGING / RESIZE
---==============================================================
-local function makeDraggable(handle, target)
-    local dragging = false
-    local startInput
-    local startPos
-
-    handle.InputBegan:Connect(function(input)
-        if State.Anchored then return end
-        if input.UserInputType ~= Enum.UserInputType.MouseButton1
-            and input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
-
-        dragging = true
-        startInput = input.Position
-        startPos = target.Position
-
-        local changed
-        changed = input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-                if changed then changed:Disconnect() end
-            end
-        end)
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if not dragging or State.Anchored then return end
-        if input.UserInputType ~= Enum.UserInputType.MouseMovement
-            and input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
-
-        local delta = input.Position - startInput
-        target.Position = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + delta.X,
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y
-        )
-    end)
-end
-
-makeDraggable(Header, Main)
-
-local ResizeHandle = create("TextButton", {
-    Size = UDim2.fromOffset(22,22),
-    Position = UDim2.new(1,-22,1,-22),
-    BackgroundTransparency = 1,
-    Text = "◢",
-    TextColor3 = Color3.fromRGB(130,115,145),
-    TextSize = 13,
-    ZIndex = 30,
-}, Main)
-
-local resizing = false
-local resizeStart
-local resizeSize
-
-ResizeHandle.InputBegan:Connect(function(input)
-    if State.Anchored then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        resizing = true
-        resizeStart = input.Position
-        resizeSize = Main.AbsoluteSize
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if not resizing or State.Anchored then return end
-    if input.UserInputType ~= Enum.UserInputType.MouseMovement
-        and input.UserInputType ~= Enum.UserInputType.Touch then
-        return
-    end
-
-    local d = input.Position - resizeStart
-    Main.Size = UDim2.fromOffset(
-        math.max(430, resizeSize.X + d.X),
-        math.max(300, resizeSize.Y + d.Y)
-    )
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-        resizing = false
-    end
-end)
-
---==============================================================
--- TAB BAR
---==============================================================
-local CatalogTab = makeButton(Main,"CATALOG",UDim2.fromOffset(10,64),UDim2.fromOffset(88,28))
-local FavoritesTab = makeButton(Main,"FAVORITES",UDim2.fromOffset(103,64),UDim2.fromOffset(96,28))
-local RecentTab = makeButton(Main,"RECENT",UDim2.fromOffset(204,64),UDim2.fromOffset(82,28))
-local FriendsTab = makeButton(Main,"FRIENDS",UDim2.fromOffset(291,64),UDim2.fromOffset(82,28))
-local SettingsTab = makeButton(Main,"SETTINGS",UDim2.fromOffset(378,64),UDim2.fromOffset(102,28))
-
---==============================================================
--- CATALOG TOP CONTROLS
---==============================================================
-local CatalogFrame = create("Frame", {
-    Size = UDim2.new(1,-20,1,-102),
-    Position = UDim2.fromOffset(10,98),
-    BackgroundTransparency = 1,
-    ZIndex = 5,
-}, Main)
-
-local Search = create("TextBox", {
-    Size = UDim2.new(1,-190,0,29),
-    Position = UDim2.fromOffset(0,0),
-    BackgroundColor3 = Color3.fromRGB(255,255,255),
-    BorderSizePixel = 0,
-    PlaceholderText = "    Search emotes...",
-    Text = "",
-    ClearTextOnFocus = false,
-    TextColor3 = Color3.fromRGB(55,47,65),
-    PlaceholderColor3 = Color3.fromRGB(130,120,140),
-    Font = Enum.Font.Gotham,
-    TextSize = 11,
-    ZIndex = 6,
-}, CatalogFrame)
-corner(Search,9)
-stroke(Search,Color3.fromRGB(220,205,230),1,0.15)
-
-local SEARCH_WHITE = "rbxassetid://120477245713734"
-local SEARCH_BLACK = "rbxassetid://15118373478"
-
-local SearchIcon = create("ImageLabel", {
-    Size = UDim2.fromOffset(16,16),
-    Position = UDim2.fromOffset(8,7),
-    BackgroundTransparency = 1,
-    Image = SEARCH_BLACK,
-    ScaleType = Enum.ScaleType.Fit,
-    ZIndex = 8,
-}, CatalogFrame)
-
-local loadCatalog
-
-local SearchClear = makeButton(CatalogFrame,"×",UDim2.new(1,-273,0,3),UDim2.fromOffset(24,23))
-SearchClear.TextSize = 14
-SearchClear.BackgroundTransparency = 1
-SearchClear.ZIndex = 10
-
-local SearchHistoryFrame = create("Frame", {
-    Size = UDim2.new(1,-250,0,0),
-    Position = UDim2.fromOffset(0,32),
-    BackgroundColor3 = Color3.fromRGB(255,255,255),
-    BorderSizePixel = 0,
-    Visible = false,
-    ZIndex = 40,
-    ClipsDescendants = true,
-}, CatalogFrame)
-corner(SearchHistoryFrame,9)
-stroke(SearchHistoryFrame,Color3.fromRGB(220,205,230),1,0.12)
-
-local SearchHistoryTitle = create("TextLabel", {
-    Size = UDim2.new(1,-56,0,26),
-    Position = UDim2.fromOffset(10,0),
-    BackgroundTransparency = 1,
-    Text = "RECENT SEARCHES",
-    TextColor3 = Color3.fromRGB(110,100,125),
-    Font = Enum.Font.GothamBold,
-    TextSize = 8,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 41,
-}, SearchHistoryFrame)
-
-local SearchHistoryClear = makeButton(SearchHistoryFrame,"CLEAR",UDim2.new(1,-52,0,4),UDim2.fromOffset(44,20))
-SearchHistoryClear.TextSize = 7
-SearchHistoryClear.ZIndex = 42
-
-local SearchHistoryList = create("ScrollingFrame", {
-    Size = UDim2.new(1,-8,1,-30),
-    Position = UDim2.fromOffset(4,28),
-    BackgroundTransparency = 1,
-    BorderSizePixel = 0,
-    ScrollBarThickness = 3,
-    AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    CanvasSize = UDim2.new(),
-    ZIndex = 41,
-}, SearchHistoryFrame)
-local SearchHistoryLayout = create("UIListLayout", {
-    Padding = UDim.new(0,2),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-}, SearchHistoryList)
-
-local function renderSearchHistory()
-    for _, child in ipairs(SearchHistoryList:GetChildren()) do
-        if child:IsA("TextButton") then child:Destroy() end
-    end
-
-    local count = 0
-    for _, keyword in ipairs(State.SearchHistory) do
-        count += 1
-        local button = makeButton(SearchHistoryList,keyword,UDim2.new(),UDim2.new(1,0,0,26))
-        button.TextXAlignment = Enum.TextXAlignment.Left
-        button.TextSize = 9
-        button.TextTruncate = Enum.TextTruncate.AtEnd
-        button.BackgroundColor3 = State.Dark and Color3.fromRGB(42,37,49) or Color3.fromRGB(255,248,253)
-        button.TextColor3 = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(55,47,65)
-        button.LayoutOrder = count
-        button.ZIndex = 42
-        button.MouseButton1Click:Connect(function()
-            Search.Text = keyword
-            SearchHistoryFrame.Visible = false
-            loadCatalog(keyword)
-        end)
-    end
-
-    local height = math.min(30 + count * 28, 170)
-    SearchHistoryFrame.Size = UDim2.new(1,-250,0,height)
-    SearchHistoryFrame.Visible = Search:IsFocused() and count > 0
-end
-
-local RefreshButton = makeButton(CatalogFrame,"↻",UDim2.new(1,-242,0,0),UDim2.fromOffset(42,29))
-local SortButton = makeButton(CatalogFrame,"Sort",UDim2.new(1,-194,0,0),UDim2.fromOffset(122,29))
-local AddIdButton = makeButton(CatalogFrame,"+ ID",UDim2.new(1,-66,0,0),UDim2.fromOffset(62,29))
-Search.Size = UDim2.new(1,-250,0,29)
-
-local List = create("ScrollingFrame", {
-    Size = UDim2.new(1,0,1,-68),
-    Position = UDim2.fromOffset(0,35),
-    BackgroundColor3 = Color3.fromRGB(255,255,255),
-    BackgroundTransparency = 0.05,
-    BorderSizePixel = 0,
-    ScrollBarThickness = 4,
-    ScrollBarImageColor3 = Color3.fromRGB(195,165,210),
-    CanvasSize = UDim2.new(),
-    AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    ZIndex = 5,
-}, CatalogFrame)
-corner(List,11)
-stroke(List,Color3.fromRGB(220,205,230),1,0.15)
-
-local ListPadding = create("UIPadding", {
-    PaddingTop = UDim.new(0,6),
-    PaddingBottom = UDim.new(0,6),
-    PaddingLeft = UDim.new(0,6),
-    PaddingRight = UDim.new(0,6),
-}, List)
-
-local Grid = create("UIGridLayout", {
-    CellSize = UDim2.fromOffset(151,72),
-    CellPadding = UDim2.fromOffset(7,7),
-    HorizontalAlignment = Enum.HorizontalAlignment.Center,
-    SortOrder = Enum.SortOrder.LayoutOrder,
-}, List)
-
-local EmptyLabel = create("TextLabel", {
-    Size = UDim2.new(1,-20,0,30),
-    Position = UDim2.new(0,10,0.5,-15),
-    BackgroundTransparency = 1,
-    Text = "No emotes found",
-    Font = Enum.Font.GothamBold,
-    TextSize = 13,
-    TextColor3 = Color3.fromRGB(115,105,125),
-    Visible = false,
-    ZIndex = 8,
-}, List)
-
-local CatalogStatus = create("TextLabel", {
-    Size = UDim2.new(1,-20,0,22),
-    Position = UDim2.fromOffset(10,4),
-    BackgroundTransparency = 1,
-    Text = "",
-    Font = Enum.Font.GothamMedium,
-    TextSize = 8,
-    TextColor3 = Color3.fromRGB(130,120,140),
-    TextXAlignment = Enum.TextXAlignment.Left,
-    Visible = false,
-    ZIndex = 9,
-}, CatalogFrame)
-
-local Prev = makeButton(CatalogFrame,"‹ PREV",UDim2.fromOffset(0,0),UDim2.fromOffset(85,28))
-Prev.Position = UDim2.new(0,0,1,-29)
-
-local PageBox = create("TextBox", {
-    Size = UDim2.fromOffset(120,28),
-    Position = UDim2.new(0.5,-60,1,-29),
-    BackgroundColor3 = Color3.fromRGB(255,255,255),
-    BorderSizePixel = 0,
-    Text = "Page 1",
-    ClearTextOnFocus = false,
-    TextColor3 = Color3.fromRGB(80,70,90),
-    Font = Enum.Font.GothamMedium,
-    TextSize = 10,
-    TextXAlignment = Enum.TextXAlignment.Center,
-    ZIndex = 7,
-}, CatalogFrame)
-corner(PageBox,9)
-stroke(PageBox,Color3.fromRGB(220,205,230),1,0.15)
-
-local Next = makeButton(CatalogFrame,"NEXT ›",UDim2.new(1,-85,1,-29),UDim2.fromOffset(85,28))
-
---==============================================================
--- FAVORITES / RECENT FRAMES
---==============================================================
-local FavoritesFrame = create("Frame", {
-    Size = UDim2.new(1,-20,1,-102),
-    Position = UDim2.fromOffset(10,98),
-    BackgroundTransparency = 1,
-    Visible = false,
-    ZIndex = 5,
-}, Main)
-
-local FavoritesSearch = create("TextBox", {
-    Size = UDim2.new(1,-92,0,29),
-    Position = UDim2.fromOffset(0,0),
-    BackgroundColor3 = Color3.fromRGB(255,255,255),
-    BorderSizePixel = 0,
-    PlaceholderText = "    Search favorites...",
-    Text = "",
-    ClearTextOnFocus = false,
-    TextColor3 = Color3.fromRGB(55,47,65),
-    PlaceholderColor3 = Color3.fromRGB(130,120,140),
-    Font = Enum.Font.Gotham,
-    TextSize = 10,
-    ZIndex = 6,
-}, FavoritesFrame)
-corner(FavoritesSearch,9)
-stroke(FavoritesSearch,Color3.fromRGB(220,205,230),1,0.15)
-
-local FavoritesClear = makeButton(FavoritesFrame,"CLEAR",UDim2.new(1,-82,0,0),UDim2.fromOffset(82,29))
-FavoritesClear.TextSize = 8
-
-local FavoritesList = create("ScrollingFrame", {
-    Size = UDim2.new(1,0,1,-35),
-    Position = UDim2.fromOffset(0,35),
-    BackgroundColor3 = Color3.fromRGB(255,255,255),
-    BackgroundTransparency = 0.05,
-    BorderSizePixel = 0,
-    ScrollBarThickness = 4,
-    AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    CanvasSize = UDim2.new(),
-    ZIndex = 5,
-}, FavoritesFrame)
-corner(FavoritesList,11)
-stroke(FavoritesList,Color3.fromRGB(220,205,230),1,0.15)
-create("UIPadding", {PaddingTop=UDim.new(0,8),PaddingBottom=UDim.new(0,8),PaddingLeft=UDim.new(0,6),PaddingRight=UDim.new(0,6)}, FavoritesList)
-local FavoritesGrid = create("UIGridLayout", {
-    CellSize=UDim2.fromOffset(151,72), CellPadding=UDim2.fromOffset(7,7),
-    HorizontalAlignment=Enum.HorizontalAlignment.Center, SortOrder=Enum.SortOrder.LayoutOrder,
-}, FavoritesList)
-
-local RecentFrame = create("Frame", {
-    Size = UDim2.new(1,-20,1,-102), Position = UDim2.fromOffset(10,98),
-    BackgroundTransparency = 1, Visible = false, ZIndex = 5,
-}, Main)
-local RecentSearch = create("TextBox", {
-    Size = UDim2.new(1,-92,0,29),
-    Position = UDim2.fromOffset(0,0),
-    BackgroundColor3 = Color3.fromRGB(255,255,255),
-    BorderSizePixel = 0,
-    PlaceholderText = "    Search recent emotes...",
-    Text = "",
-    ClearTextOnFocus = false,
-    TextColor3 = Color3.fromRGB(55,47,65),
-    PlaceholderColor3 = Color3.fromRGB(130,120,140),
-    Font = Enum.Font.Gotham,
-    TextSize = 10,
-    ZIndex = 6,
-}, RecentFrame)
-corner(RecentSearch,9)
-stroke(RecentSearch,Color3.fromRGB(220,205,230),1,0.15)
-
-local RecentClear = makeButton(RecentFrame,"CLEAR",UDim2.new(1,-82,0,0),UDim2.fromOffset(82,29))
-RecentClear.TextSize = 8
-
-local RecentList = create("ScrollingFrame", {
-    Size=UDim2.new(1,0,1,-35), Position=UDim2.fromOffset(0,35),
-    BackgroundColor3=Color3.fromRGB(255,255,255), BackgroundTransparency=0.05,
-    BorderSizePixel=0, ScrollBarThickness=4, AutomaticCanvasSize=Enum.AutomaticSize.Y,
-    CanvasSize=UDim2.new(), ZIndex=5,
-}, RecentFrame)
-corner(RecentList,11)
-stroke(RecentList,Color3.fromRGB(220,205,230),1,0.15)
-create("UIPadding", {PaddingTop=UDim.new(0,8),PaddingBottom=UDim.new(0,8),PaddingLeft=UDim.new(0,6),PaddingRight=UDim.new(0,6)}, RecentList)
-local RecentGrid = create("UIGridLayout", {
-    CellSize=UDim2.fromOffset(151,72), CellPadding=UDim2.fromOffset(7,7),
-    HorizontalAlignment=Enum.HorizontalAlignment.Center, SortOrder=Enum.SortOrder.LayoutOrder,
-}, RecentList)
-
---==============================================================
--- FRIENDS FRAME
+-- FRIENDS / PLAYERS FRAME
 --==============================================================
 local FriendsFrame = create("Frame", {
     Size = UDim2.new(1,-20,1,-102),
@@ -1463,7 +855,7 @@ local FriendsInfo = create("TextLabel", {
     Size = UDim2.new(1,-92,0,29),
     Position = UDim2.fromOffset(0,0),
     BackgroundTransparency = 1,
-    Text = "SERVER FRIENDS • PLAY / SYNC / REQUEST",
+    Text = "PLAYERS IN SERVER • COPY THEIR CURRENT EMOTE",
     TextColor3 = Color3.fromRGB(116,108,130),
     Font = Enum.Font.GothamBold,
     TextSize = 8,
@@ -1472,7 +864,7 @@ local FriendsInfo = create("TextLabel", {
 }, FriendsFrame)
 
 FriendsList = create("ScrollingFrame", {
-    Size = UDim2.new(1,0,1,-70),
+    Size = UDim2.new(1,0,1,-40),
     Position = UDim2.fromOffset(0,35),
     BackgroundColor3 = Color3.fromRGB(255,255,255),
     BackgroundTransparency = 0.05,
@@ -1491,27 +883,6 @@ create("UIPadding", {
 create("UIListLayout", {
     Padding=UDim.new(0,5),SortOrder=Enum.SortOrder.LayoutOrder
 }, FriendsList)
-
-local FriendsSettings = create("Frame", {
-    Size = UDim2.new(1,0,0,29),
-    Position = UDim2.new(0,0,1,-29),
-    BackgroundTransparency = 1,
-    ZIndex = 6,
-}, FriendsFrame)
-
-local AutoAcceptButton = makeButton(FriendsSettings,"AUTO ACCEPT: OFF",UDim2.fromOffset(0,0),UDim2.fromOffset(128,25))
-AutoAcceptButton.TextSize = 6.5
-local AutoRejectButton = makeButton(FriendsSettings,"AUTO REJECT: OFF",UDim2.fromOffset(134,0),UDim2.fromOffset(128,25))
-AutoRejectButton.TextSize = 6.5
-local SyncSettingButton = makeButton(FriendsSettings,"SYNC: ON",UDim2.fromOffset(268,0),UDim2.fromOffset(90,25))
-SyncSettingButton.TextSize = 7
-
-local function refreshFriendSettings()
-    AutoAcceptButton.Text = State.FriendSettings.AutoAccept and "AUTO ACCEPT: ON" or "AUTO ACCEPT: OFF"
-    AutoRejectButton.Text = State.FriendSettings.AutoReject and "AUTO REJECT: ON" or "AUTO REJECT: OFF"
-    SyncSettingButton.Text = State.FriendSettings.SyncEmote and "SYNC: ON" or "SYNC: OFF"
-end
-refreshFriendSettings()
 
 --==============================================================
 -- SETTINGS FRAME
@@ -2788,30 +2159,6 @@ PageBox.FocusLost:Connect(function(enter)
 end)
 
 FriendsRefresh.MouseButton1Click:Connect(renderFriends)
-AutoAcceptButton.MouseButton1Click:Connect(function()
-    local value = not State.FriendSettings.AutoAccept
-    setFriendSetting("AutoAccept",value)
-    if value then
-        setFriendSetting("AutoReject",false)
-    end
-    refreshFriendSettings()
-    toast(value and "Auto accept enabled" or "Auto accept disabled")
-end)
-AutoRejectButton.MouseButton1Click:Connect(function()
-    local value = not State.FriendSettings.AutoReject
-    setFriendSetting("AutoReject",value)
-    if value then
-        setFriendSetting("AutoAccept",false)
-    end
-    refreshFriendSettings()
-    toast(value and "Auto reject enabled" or "Auto reject disabled")
-end)
-SyncSettingButton.MouseButton1Click:Connect(function()
-    local value = not State.FriendSettings.SyncEmote
-    setFriendSetting("SyncEmote",value)
-    refreshFriendSettings()
-    toast(value and "Friend sync enabled" or "Friend sync disabled")
-end)
 
 local setTab
 
@@ -2824,12 +2171,12 @@ setTab = function(tab)
     FriendsFrame.Visible = tab == "Friends"
     SettingsFrame.Visible = tab == "Settings"
 
-    local tabOn = State.Dark and Color3.fromRGB(76,55,82) or Color3.fromRGB(235,220,245)
-    local tabOff = State.Dark and Color3.fromRGB(42,37,49) or Color3.fromRGB(255,248,253)
+    local tabOn = State.Dark and Color3.fromRGB(79,37,82) or Color3.fromRGB(235,220,245)
+    local tabOff = State.Dark and Color3.fromRGB(30,20,37) or Color3.fromRGB(255,248,253)
     for _,entry in ipairs({{CatalogTab,"Catalog"},{FavoritesTab,"Favorites"},{RecentTab,"Recent"},{FriendsTab,"Friends"},{SettingsTab,"Settings"}}) do
         entry[1].BackgroundColor3 = tab == entry[2] and tabOn or tabOff
     end
-    local tabText = State.Dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(55,47,65)
+    local tabText = State.Dark and Color3.fromRGB(250,239,255) or Color3.fromRGB(55,47,65)
     CatalogTab.TextColor3 = tabText; FavoritesTab.TextColor3 = tabText; RecentTab.TextColor3 = tabText; FriendsTab.TextColor3 = tabText; SettingsTab.TextColor3 = tabText
 
     if tab == "Favorites" then
@@ -2874,12 +2221,12 @@ end)
 local applyTheme
 
 ThemeButton.MouseButton1Click:Connect(function()
-    State.ThemeIndex = (State.ThemeIndex % #Themes) + 1
-    local theme = getTheme()
-    ThemeButton.Text = theme.Dark and "☀" or "🌙"
-    if applyTheme then applyTheme() end
+    State.Dark = not State.Dark
+    ThemeButton.Text = State.Dark and "☀" or "🌙"
+    if applyTheme then
+        applyTheme()
+    end
     setTab(State.Tab)
-    toast("Theme: " .. theme.Name)
 end)
 
 --==============================================================
@@ -3079,16 +2426,15 @@ end)
 -- THEME / ANIMATION
 --==============================================================
 applyTheme = function()
-    local theme = getTheme()
-    local dark = theme.Dark
-    local surface = dark and Color3.fromRGB(31,27,36) or Color3.fromRGB(255,255,255)
-    local listSurface = dark and Color3.fromRGB(27,24,31) or Color3.fromRGB(255,255,255)
-    local buttonSurface = dark and Color3.fromRGB(42,37,49) or Color3.fromRGB(255,248,253)
-    local text = dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(55,47,65)
-    local muted = dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(116,108,130)
+    local dark = State.Dark
+    local surface = dark and Color3.fromRGB(20,16,28) or Color3.fromRGB(255,255,255)
+    local listSurface = dark and Color3.fromRGB(14,12,20) or Color3.fromRGB(255,255,255)
+    local buttonSurface = dark and Color3.fromRGB(45,27,52) or Color3.fromRGB(255,248,253)
+    local text = dark and Color3.fromRGB(250,239,255) or Color3.fromRGB(55,47,65)
+    local muted = dark and Color3.fromRGB(181,157,198) or Color3.fromRGB(116,108,130)
 
-    Main.BackgroundColor3 = dark and Color3.fromRGB(20,17,24) or Color3.fromRGB(248,245,255)
-    MainStroke.Color = dark and Color3.fromRGB(160,104,132) or Color3.fromRGB(220,205,230)
+    Main.BackgroundColor3 = dark and Color3.fromRGB(10,8,15) or Color3.fromRGB(248,245,255)
+    MainStroke.Color = dark and Color3.fromRGB(185,82,151) or Color3.fromRGB(220,205,230)
     Title.TextColor3 = dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(53,49,67)
     Subtitle.TextColor3 = muted
     Search.BackgroundColor3 = surface
@@ -3170,13 +2516,21 @@ applyTheme()
 
 RunService.RenderStepped:Connect(function(dt)
     State.GradientTime += dt
-    Gradient.Offset = Vector2.new(math.sin(State.GradientTime * 0.7) * 0.48, math.cos(State.GradientTime * 0.45) * 0.12)
-    local colors = getTheme().Colors
-    Gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,colors[1]),
-        ColorSequenceKeypoint.new(0.5,colors[2]),
-        ColorSequenceKeypoint.new(1,colors[3]),
-    })
+    Gradient.Offset = Vector2.new(math.sin(State.GradientTime * 0.62) * 0.48, math.cos(State.GradientTime * 0.41) * 0.08)
+    if State.Dark then
+        Gradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0,Color3.fromRGB(96,24,76)),
+            ColorSequenceKeypoint.new(0.38,Color3.fromRGB(42,18,70)),
+            ColorSequenceKeypoint.new(0.72,Color3.fromRGB(19,42,72)),
+            ColorSequenceKeypoint.new(1,Color3.fromRGB(74,23,61)),
+        })
+    else
+        Gradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0,Color3.fromRGB(255,226,241)),
+            ColorSequenceKeypoint.new(0.48,Color3.fromRGB(235,226,255)),
+            ColorSequenceKeypoint.new(1,Color3.fromRGB(213,249,239)),
+        })
+    end
 end)
 
 setEffectsForMain(not State.Hidden)
@@ -3203,10 +2557,10 @@ print("[SAIKI EMOTES] Gaze Edition loaded.")
     local compiler = loadstring or load
     if type(compiler) ~= "function" then
         show("BOOT ERROR\nloadstring/load is unavailable in this executor.")
-        warn("[SAIKI EMOTES V40] loadstring/load unavailable")
+        warn("[SAIKI EMOTES V49] loadstring/load unavailable")
         return
     end
-    local okCompile, chunkOrError = pcall(compiler, source, "SaikiEmotes_V40_Core")
+    local okCompile, chunkOrError = pcall(compiler, source, "SaikiEmotes_V49_Core")
     if not okCompile or type(chunkOrError) ~= "function" then
         show("COMPILE ERROR\n"..tostring(chunkOrError))
         warn("[SAIKI EMOTES V40 COMPILE ERROR]", chunkOrError)
