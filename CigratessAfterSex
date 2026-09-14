@@ -616,7 +616,6 @@ loadSaved()
 -- Firebase cloud is configured, friends are also stored across sessions and
 -- can send real friend/sync requests through the shared database.
 local renderFriends
-local FriendsList
 
 local function isServerFriend(other)
     if not other or other == player then return false end
@@ -1851,7 +1850,7 @@ local FriendsInfo = create("TextLabel", {
     ZIndex = 6,
 }, FriendsFrame)
 
-FriendsList = create("ScrollingFrame", {
+local FriendsList = create("ScrollingFrame", {
     Size = UDim2.new(1,0,1,-70),
     Position = UDim2.fromOffset(0,35),
     BackgroundColor3 = Color3.fromRGB(255,255,255),
@@ -2543,10 +2542,8 @@ local FavoriteCards = {}
 local RecentCards = {}
 local renderSerial = 0
 local renderFavorites
-local renderRecent
 
 local function clearCardTable(tbl)
-    if type(tbl) ~= "table" then return end
     for _,card in pairs(tbl) do
         if card and card.Parent then
             card:Destroy()
@@ -2556,8 +2553,6 @@ local function clearCardTable(tbl)
 end
 
 local function createEmoteCard(item, parent, cardTable, isRecentCard)
-    if type(cardTable) ~= "table" then return nil end
-    if not parent then return nil end
     local id = numericId(item.Id or item.id or item.AssetId or item.assetId)
     if not id then return end
 
@@ -2701,10 +2696,10 @@ local function createEmoteCard(item, parent, cardTable, isRecentCard)
     end)
 
     table.insert(cardTable,card)
-    return card
 end
 
--- renderFavorites/renderRecent are forward-declared above createEmoteCard.
+-- renderFavorites is forward-declared above createEmoteCard.
+local renderRecent
 
 --==============================================================
 -- CATALOG RENDER / PAGINATION
