@@ -327,20 +327,17 @@ local HeaderAccent = New("Frame", {
     ZIndex = 6,
 }, Header)
 
-local TitleIcon = New("TextLabel", {
-    Position = UDim2.fromOffset(13, 6),
-    Size = UDim2.fromOffset(32, 32),
+local TitleIcon = New("ImageLabel", {
+    Position = UDim2.fromOffset(11, 7),
+    Size = UDim2.fromOffset(28, 28),
     BackgroundTransparency = 1,
-    Font = BOLD,
-    Text = "✦",
-    TextSize = 23,
-    TextColor3 = WHITE,
+    Image = "rbxassetid://6379534047",
+    ScaleType = Enum.ScaleType.Fit,
     ZIndex = 7,
 }, Header)
-TextGradient(TitleIcon)
 
 local Title = New("TextLabel", {
-    Position = UDim2.fromOffset(48, 5),
+    Position = UDim2.fromOffset(45, 5),
     Size = UDim2.fromOffset(230, 20),
     BackgroundTransparency = 1,
     Font = BOLD,
@@ -353,7 +350,7 @@ local Title = New("TextLabel", {
 TextGradient(Title)
 
 local Subtitle = New("TextLabel", {
-    Position = UDim2.fromOffset(49, 23),
+    Position = UDim2.fromOffset(46, 23),
     Size = UDim2.fromOffset(230, 13),
     BackgroundTransparency = 1,
     Font = FONT,
@@ -364,26 +361,22 @@ local Subtitle = New("TextLabel", {
     ZIndex = 7,
 }, Header)
 
-local StatusDot = New("Frame", {
-    Position = UDim2.new(1, -82, 0.5, -4),
-    Size = UDim2.fromOffset(8, 8),
-    BackgroundColor3 = GREEN,
+local AnchorButton = New("TextButton", {
+    Name = "AnchorButton",
+    Position = UDim2.new(1, -67, 0.5, -12),
+    Size = UDim2.fromOffset(57, 24),
+    BackgroundColor3 = BLACK_2,
+    BackgroundTransparency = 0.05,
     BorderSizePixel = 0,
-    ZIndex = 7,
-}, Header)
-Corner(StatusDot, 4)
-
-local StatusText = New("TextLabel", {
-    Position = UDim2.new(1, -68, 0.5, -7),
-    Size = UDim2.fromOffset(55, 14),
-    BackgroundTransparency = 1,
+    AutoButtonColor = false,
     Font = BOLD,
-    Text = "CATALOG",
+    Text = "ANCHOR",
     TextSize = 7,
-    TextColor3 = MUTED,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 7,
+    TextColor3 = WHITE,
+    ZIndex = 8,
 }, Header)
+Corner(AnchorButton, 6)
+Stroke(AnchorButton, Color3.fromRGB(75, 30, 40), 1)
 
 --============================================================
 -- SEARCH
@@ -1546,9 +1539,6 @@ local function LoadCatalogPage(pageNumber)
     SearchGeneration += 1
     local generation = SearchGeneration
     pageNumber = math.max(1, tonumber(pageNumber) or 1)
-
-    StatusText.Text = "LOADING"
-    StatusDot.BackgroundColor3 = Color3.fromRGB(255, 190, 65)
     EmptyText.Visible = false
     ClearGrid()
     PageLabel.Text = "LOADING"
@@ -1570,8 +1560,6 @@ local function LoadCatalogPage(pageNumber)
     -- Cached UI page: instant render.
     if cache.uiPages[pageNumber] then
         CurrentPage = pageNumber
-        StatusText.Text = "CATALOG"
-        StatusDot.BackgroundColor3 = GREEN
         RenderCatalogEntries(cache.uiPages[pageNumber], pageNumber, cache.uiFinished[pageNumber], generation)
         return
     end
@@ -1582,8 +1570,6 @@ local function LoadCatalogPage(pageNumber)
             local pages = BuildCatalogPage(SearchQuery)
             if not pages then
                 if generation == SearchGeneration then
-                    StatusText.Text = "ERROR"
-                    StatusDot.BackgroundColor3 = RED
                     EmptyText.Text = "Roblox catalog search failed."
                     EmptyText.Visible = true
                     PageLabel.Text = "ERROR"
@@ -1604,8 +1590,6 @@ local function LoadCatalogPage(pageNumber)
 
         CurrentPagesObject = cache.pages
         CurrentPage = pageNumber
-        StatusText.Text = "CATALOG"
-        StatusDot.BackgroundColor3 = GREEN
         RenderCatalogEntries(entries, pageNumber, finished, generation)
 
         -- Prefetch the next 15-item UI page. If it is the second
@@ -1671,8 +1655,6 @@ local function SelectTab(tab)
         else
             local cache = CatalogCache[SearchQuery]
             CurrentPagesObject = cache.pages
-            StatusText.Text = "CATALOG"
-            StatusDot.BackgroundColor3 = GREEN
             RenderCatalogEntries(cache.uiPages[CurrentPage], CurrentPage, cache.uiFinished[CurrentPage], SearchGeneration)
         end
     elseif favoritesActive then
@@ -1777,15 +1759,29 @@ Stop.MouseButton1Click:Connect(function()
 end)
 
 --============================================================
--- MAIN WINDOW DRAGGING
+-- MAIN WINDOW / TOGGLE ANCHORING + DRAGGING
 --============================================================
+
+local GuiAnchored = false
+
+local function UpdateAnchorButton()
+    AnchorButton.Text = GuiAnchored and "ANCHORED" or "ANCHOR"
+    AnchorButton.BackgroundColor3 = GuiAnchored and RED or BLACK_2
+end
+
+AnchorButton.MouseButton1Click:Connect(function()
+    GuiAnchored = not GuiAnchored
+    UpdateAnchorButton()
+end)
 
 do
     local dragging = false
+
     local startInput
     local startPosition
 
     Header.InputBegan:Connect(function(input)
+        if GuiAnchored then return end
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
@@ -1795,6 +1791,7 @@ do
     end)
 
     UserInputService.InputChanged:Connect(function(input)
+        if GuiAnchored then dragging = false return end
         if not dragging then return end
         if input.UserInputType ~= Enum.UserInputType.MouseMovement
             and input.UserInputType ~= Enum.UserInputType.Touch then return end
@@ -1845,6 +1842,7 @@ local toggleStart
 local togglePosition
 
 Toggle.InputBegan:Connect(function(input)
+    if GuiAnchored then return end
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
         toggleDragging = true
@@ -1855,6 +1853,7 @@ Toggle.InputBegan:Connect(function(input)
 end)
 
 UserInputService.InputChanged:Connect(function(input)
+    if GuiAnchored then toggleDragging = false return end
     if not toggleDragging then return end
     if input.UserInputType ~= Enum.UserInputType.MouseMovement
         and input.UserInputType ~= Enum.UserInputType.Touch then return end
@@ -1902,6 +1901,7 @@ end)
 
 MainGui.Enabled = true
 Hud.Visible = false
+UpdateAnchorButton()
 Loop.BackgroundColor3 = Settings.Looped and RED or BLACK_2
 SelectTab("Emotes")
 
