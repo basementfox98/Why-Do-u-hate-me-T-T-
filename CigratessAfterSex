@@ -1037,7 +1037,7 @@ local TabEmotes = New("TextButton", {
     BorderSizePixel = 0,
     AutoButtonColor = false,
     Font = BOLD,
-    Text = "EMOTES",
+    Text = "",
     TextSize = 9,
     TextColor3 = WHITE,
     ZIndex = 21,
@@ -1053,9 +1053,9 @@ local TabFavorites = New("TextButton", {
     BorderSizePixel = 0,
     AutoButtonColor = false,
     Font = BOLD,
-    Text = "FAVORITES",
+    Text = "",
     TextSize = 9,
-    TextColor3 = MUTED,
+    TextColor3 = WHITE,
     ZIndex = 21,
 }, Tabs)
 Corner(TabFavorites, 8)
@@ -1069,13 +1069,42 @@ local TabSettings = New("TextButton", {
     BorderSizePixel = 0,
     AutoButtonColor = false,
     Font = BOLD,
-    Text = "SETTINGS",
+    Text = "",
     TextSize = 9,
-    TextColor3 = MUTED,
+    TextColor3 = WHITE,
     ZIndex = 21,
 }, Tabs)
 Corner(TabSettings, 8)
 local SettingsTabStroke = Stroke(TabSettings, DARK_RED, 1)
+
+-- Dedicated tab labels sit above the animated button gradients.
+-- This keeps EMOTES / FAVORITES / SETTINGS readable in every theme and
+-- prevents the UIGradient on the button surface from affecting the text.
+local function CreateTabLabel(parent, text)
+    local label = New("TextLabel", {
+        Name = "Label",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.new(1, -10, 1, 0),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Font = BOLD,
+        Text = text,
+        TextSize = 10,
+        TextColor3 = WHITE,
+        TextTransparency = 0,
+        TextStrokeColor3 = BLACK,
+        TextStrokeTransparency = 0.35,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = 23,
+    }, parent)
+    return label
+end
+
+local TabEmotesLabel = CreateTabLabel(TabEmotes, "EMOTES")
+local TabFavoritesLabel = CreateTabLabel(TabFavorites, "FAVORITES")
+local TabSettingsLabel = CreateTabLabel(TabSettings, "SETTINGS")
 
 -- Active-tab gradient: exactly one tab receives the animated gradient at a time.
 -- Inactive tabs remain clean/flat and immediately return to their normal surface.
@@ -2211,15 +2240,15 @@ local function SelectTab(tab)
     TabFavorites.BackgroundColor3 = favoritesActive and GLASS_2 or BLACK_2
     TabSettings.BackgroundColor3 = settingsActive and GLASS_2 or BLACK_2
 
-    -- Keep unselected tab labels clearly readable against the dark glass.
-    -- Use the theme's white instead of the softer muted color.
-    local tabTextInactive = ThemeDefinitions[CurrentThemeName].WHITE
-    TabEmotes.TextColor3 = emotesActive and WHITE or tabTextInactive
-    TabFavorites.TextColor3 = favoritesActive and WHITE or tabTextInactive
-    TabSettings.TextColor3 = settingsActive and WHITE or tabTextInactive
-    TabEmotes.TextTransparency = 0
-    TabFavorites.TextTransparency = 0
-    TabSettings.TextTransparency = 0
+    -- Dedicated labels are always bright white with a subtle dark outline.
+    -- They are independent of the tab surface gradient, so all three names
+    -- remain readable regardless of theme, gradient position, or selection.
+    TabEmotesLabel.TextColor3 = WHITE
+    TabFavoritesLabel.TextColor3 = WHITE
+    TabSettingsLabel.TextColor3 = WHITE
+    TabEmotesLabel.TextTransparency = 0
+    TabFavoritesLabel.TextTransparency = 0
+    TabSettingsLabel.TextTransparency = 0
 
     EmoteTabStroke.Color = emotesActive and RED or DARK_RED
     FavoriteTabStroke.Color = favoritesActive and RED or DARK_RED
