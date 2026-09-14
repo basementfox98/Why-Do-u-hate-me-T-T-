@@ -1,5 +1,5 @@
 --//============================================================
---// SAIKI EMOTES - GLASS V5 FIXED
+--// SAIKI EMOTES - GLASS V8 SETTINGS / COPY FIX
 --//============================================================
 --// Small black/red glassmorphic emote browser.
 --//
@@ -65,7 +65,6 @@ local Settings = {
     Speed = 1,
     Looped = true,
     StopOnMovement = false,
-    ShowHUD = true,
     Notifications = true,
     CopyEmoteEnabled = false,
 }
@@ -215,8 +214,8 @@ local function LoadSettings()
                 if tonumber(data.Speed) then Settings.Speed = math.clamp(tonumber(data.Speed), 0.25, 3) end
                 if data.Looped ~= nil then Settings.Looped = data.Looped == true end
                 if data.StopOnMovement ~= nil then Settings.StopOnMovement = data.StopOnMovement == true end
-                if data.ShowHUD ~= nil then Settings.ShowHUD = data.ShowHUD == true end
                 if data.Notifications ~= nil then Settings.Notifications = data.Notifications == true end
+                if data.CopyEmoteEnabled ~= nil then Settings.CopyEmoteEnabled = data.CopyEmoteEnabled == true end
             end
         end
     end)
@@ -724,20 +723,13 @@ local MoveSettingToggle = MakeSettingToggle(MoveRow, Settings.StopOnMovement, fu
     SaveSettings()
 end)
 
-local HudRow = MakeSettingRow("Show Playback HUD", "Show the playback controls while an emote is running.", 5)
-local HudSettingToggle = MakeSettingToggle(HudRow, Settings.ShowHUD, function(v)
-    Settings.ShowHUD = v
-    Hud.Visible = v and CurrentTrack ~= nil
-    SaveSettings()
-end)
-
-local NotifyRow = MakeSettingRow("Notifications", "Show a Roblox notification whenever an emote starts.", 6)
+local NotifyRow = MakeSettingRow("Notifications", "Show a Roblox notification whenever an emote starts.", 5)
 local NotifySettingToggle = MakeSettingToggle(NotifyRow, Settings.Notifications, function(v)
     Settings.Notifications = v
     SaveSettings()
 end)
 
-local CopyRow = MakeSettingRow("Copy Emote", "Create a prompt near other players to copy their current emote.", 7, 48)
+local CopyRow = MakeSettingRow("Copy Emote", "Create a prompt near other players to copy their current emote.", 6, 48)
 local CopySettingToggle = MakeSettingToggle(CopyRow, Settings.CopyEmoteEnabled, function(v)
     Settings.CopyEmoteEnabled = v
     if v then
@@ -748,21 +740,21 @@ local CopySettingToggle = MakeSettingToggle(CopyRow, Settings.CopyEmoteEnabled, 
     SaveSettings()
 end)
 
-local InfoRow = MakeSettingRow("Language", "English only, matching the Saiki Emotes interface.", 8)
+local InfoRow = MakeSettingRow("Language", "English only, matching the Saiki Emotes interface.", 7)
 local LanguageValue = New("TextLabel", {
     AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -9, 0.5, 0),
     Size = UDim2.fromOffset(62, 24), BackgroundTransparency = 1, Font = BOLD,
     Text = "ENGLISH", TextSize = 8, TextColor3 = WHITE, ZIndex = 8,
 }, InfoRow)
 
-local ThemeRow = MakeSettingRow("Theme", "Saiki Red glass theme. VEX themes are not copied because Saiki uses its own fixed visual style.", 9, 50)
+local ThemeRow = MakeSettingRow("Theme", "Saiki Red glass theme. VEX themes are not copied because Saiki uses its own fixed visual style.", 8, 50)
 local ThemeValue = New("TextLabel", {
     AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -9, 0.5, 0),
     Size = UDim2.fromOffset(62, 24), BackgroundTransparency = 1, Font = BOLD,
     Text = "SAIKI RED", TextSize = 8, TextColor3 = RED, ZIndex = 8,
 }, ThemeRow)
 
-local ResetRow = MakeSettingRow("Reset Settings", "Restore all configurable Saiki Emotes settings to their defaults.", 10)
+local ResetRow = MakeSettingRow("Reset Settings", "Restore all configurable Saiki Emotes settings to their defaults.", 9)
 local ResetSettingsButton = New("TextButton", {
     AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -9, 0.5, 0),
     Size = UDim2.fromOffset(65, 25), BackgroundColor3 = RED, BorderSizePixel = 0,
@@ -773,7 +765,6 @@ ResetSettingsButton.MouseButton1Click:Connect(function()
     Settings.Speed = 1
     Settings.Looped = true
     Settings.StopOnMovement = false
-    Settings.ShowHUD = true
     Settings.Notifications = true
     Settings.CopyEmoteEnabled = false
     SpeedValue.Text = "1.00x"
@@ -943,7 +934,10 @@ local function StopEmote()
     CurrentTrack = nil
 
     if CurrentAnimation then
-        CurrentAnimation:Destroy()
+        -- Only destroy Animation instances created by Saiki itself.
+        if CurrentAnimation.Name == "SaikiPlayingEmote" or string.sub(CurrentAnimation.Name, 1, 12) == "SaikiEmote_" then
+            pcall(function() CurrentAnimation:Destroy() end)
+        end
         CurrentAnimation = nil
     end
 
@@ -1046,7 +1040,7 @@ local function PlayEmote(emote)
 
         HudName.Text = emote.name
         HudSpeed.Text = string.format("%.2fx", Settings.Speed)
-        Hud.Visible = Settings.ShowHUD
+        Hud.Visible = true
 
         if Settings.Notifications then
             pcall(function()
@@ -1074,11 +1068,115 @@ local function PlayEmote(emote)
 end
 
 --============================================================
--- COPY EMOTE (VEX-STYLE SETTING)
+-- COPY EMOTE (INFINITE YIELD / VEX-STYLE)
 --============================================================
+-- Copies the target player's actual currently-playing AnimationTrack.
+-- This preserves the animation, speed, and current time position instead
+-- of trying to interpret the animation as a Roblox catalog emote ID.
 
 local COPY_PROMPT_TAG = "SaikiCopyEmotePrompt"
 local CopyConnections = {}
+
+local function CopyPlayingAnimationFrom(targetCharacter)
+    if not targetCharacter or targetCharacter == Player.Character then return false end
+
+    local targetHumanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+    local myCharacter = Player.Character
+    local myHumanoid = myCharacter and myCharacter:FindFirstChildOfClass("Humanoid")
+    if not targetHumanoid or not myHumanoid then return false end
+
+    local targetAnimator = targetHumanoid:FindFirstChildOfClass("Animator")
+    local myAnimator = myHumanoid:FindFirstChildOfClass("Animator")
+    if not targetAnimator or not myAnimator then return false end
+
+    local targetTracks = targetAnimator:GetPlayingAnimationTracks()
+
+    -- Match Infinite Yield's behavior: copy the first non-default animation.
+    for _, targetTrack in ipairs(targetTracks) do
+        local animation = targetTrack.Animation
+        local animationId = animation and tostring(animation.AnimationId or "") or ""
+
+        if animation and animationId ~= "" and not string.find(animationId, "507768375", 1, true) then
+            -- Stop our current emote first.
+            StopEmote()
+
+            local ok, copiedTrack = pcall(function()
+                return myAnimator:LoadAnimation(animation)
+            end)
+
+            if not ok or not copiedTrack then
+                return false
+            end
+
+            copiedTrack.Priority = Enum.AnimationPriority.Action4
+            copiedTrack.Looped = targetTrack.Looped
+
+            local speed = tonumber(targetTrack.Speed) or 1
+            local timePosition = tonumber(targetTrack.TimePosition) or 0
+
+            local played = pcall(function()
+                copiedTrack:Play(0.1, 1, speed)
+                if copiedTrack.Length > 0 then
+                    copiedTrack.TimePosition = math.clamp(timePosition, 0, copiedTrack.Length)
+                else
+                    copiedTrack.TimePosition = timePosition
+                end
+            end)
+
+            if not played then
+                pcall(function() copiedTrack:Stop() end)
+                pcall(function() copiedTrack:Destroy() end)
+                return false
+            end
+
+            CurrentTrack = copiedTrack
+            CurrentAnimation = animation
+            CurrentEmote = {
+                id = AssetId(animationId),
+                name = "Copied Emote",
+            }
+
+            HudName.Text = "Copied Emote"
+            HudSpeed.Text = string.format("%.2fx", speed)
+            Hud.Visible = true
+
+            if Settings.Notifications then
+                pcall(function()
+                    game:GetService("StarterGui"):SetCore("SendNotification", {
+                        Title = "Saiki Emotes",
+                        Text = "Copied emote from " .. tostring(targetCharacter.Name),
+                        Duration = 2,
+                    })
+                end)
+            end
+
+            -- Keep the copied animation synchronized with the source track.
+            TrackConnection = RunService.Heartbeat:Connect(function()
+                if CurrentTrack ~= copiedTrack then return end
+
+                if not targetTrack.IsPlaying then
+                    StopEmote()
+                    return
+                end
+
+                if not copiedTrack.IsPlaying then
+                    StopEmote()
+                    return
+                end
+
+                -- Infinite Yield starts the copied track at the target's
+                -- speed/time. Keep speed in sync if the source changes it.
+                pcall(function()
+                    copiedTrack:AdjustSpeed(targetTrack.Speed)
+                end)
+            end)
+
+            return true
+        end
+    end
+
+    return false
+end
 
 local function CopyPromptForCharacter(targetCharacter)
     if not targetCharacter or targetCharacter == Player.Character then return end
@@ -1088,29 +1186,24 @@ local function CopyPromptForCharacter(targetCharacter)
     local prompt = Instance.new("ProximityPrompt")
     prompt.Name = COPY_PROMPT_TAG
     prompt.ActionText = "Copy Emote"
-    prompt.ObjectText = ""
+    prompt.ObjectText = targetCharacter.Name
     prompt.MaxActivationDistance = 10
     prompt.HoldDuration = 0
     prompt.RequiresLineOfSight = false
+    prompt.KeyboardKeyCode = Enum.KeyCode.E
     prompt.Parent = root
 
-    prompt.Triggered:Connect(function()
-        local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
-        local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
-        if not animator then return end
-
-        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-            local anim = track.Animation
-            local id = anim and AssetId(anim.AnimationId)
-            if id then
-                local known = KnownEmotes[id]
-                if known then
-                    PlayEmote(known)
-                else
-                    PlayEmote({id = id, name = "Copied Emote"})
-                end
-                return
-            end
+    prompt.Triggered:Connect(function(triggeringPlayer)
+        if triggeringPlayer and triggeringPlayer ~= Player then return end
+        local copied = CopyPlayingAnimationFrom(targetCharacter)
+        if not copied and Settings.Notifications then
+            pcall(function()
+                game:GetService("StarterGui"):SetCore("SendNotification", {
+                    Title = "Saiki Emotes",
+                    Text = "That player is not playing a copyable emote.",
+                    Duration = 2,
+                })
+            end)
         end
     end)
 end
@@ -1137,7 +1230,12 @@ EnableCopyEmotePrompts = function()
 
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= Player then
-            if p.Character then CopyPromptForCharacter(p.Character) end
+            if p.Character then
+                task.spawn(function()
+                    CopyPromptForCharacter(p.Character)
+                end)
+            end
+
             table.insert(CopyConnections, p.CharacterAdded:Connect(function(character)
                 if Settings.CopyEmoteEnabled then
                     task.wait(0.25)
@@ -1791,3 +1889,10 @@ MainGui.Enabled = true
 Hud.Visible = false
 Loop.BackgroundColor3 = Settings.Looped and RED or BLACK_2
 SelectTab("Emotes")
+
+-- Restore Copy Emote prompts immediately when the saved setting is enabled.
+if Settings.CopyEmoteEnabled and EnableCopyEmotePrompts then
+    task.defer(function()
+        EnableCopyEmotePrompts()
+    end)
+end
