@@ -164,6 +164,7 @@ local Settings = {
 
 local State = {
     Dark = false,
+    ThemeIndex = 1,
     Hidden = false,
     Anchored = false,
 
@@ -203,6 +204,79 @@ local State = {
 local PAGE_SIZE = 10
 local MAX_RECENT = 20
 local MAX_SEARCH_HISTORY = 8
+
+-- Forward declarations used by theme controls created before the tab/theme handlers.
+local applyTheme
+local setTab
+
+--==============================================================
+-- THEME PRESETS
+--==============================================================
+local ThemePresets = {
+    {
+        Name = "Sakura Dream", Dark = false,
+        Main = Color3.fromRGB(248,245,255), Stroke = Color3.fromRGB(220,205,230),
+        Surface = Color3.fromRGB(255,255,255), List = Color3.fromRGB(255,255,255), Button = Color3.fromRGB(255,248,253),
+        Text = Color3.fromRGB(55,47,65), Muted = Color3.fromRGB(116,108,130),
+        TabOn = Color3.fromRGB(235,220,245), TabOff = Color3.fromRGB(255,248,253),
+        Gradient = {Color3.fromRGB(255,226,241),Color3.fromRGB(235,226,255),Color3.fromRGB(213,249,239)},
+    },
+    {
+        Name = "Ocean Pulse", Dark = false,
+        Main = Color3.fromRGB(241,250,255), Stroke = Color3.fromRGB(185,215,230),
+        Surface = Color3.fromRGB(255,255,255), List = Color3.fromRGB(248,253,255), Button = Color3.fromRGB(235,248,255),
+        Text = Color3.fromRGB(35,57,70), Muted = Color3.fromRGB(92,119,132),
+        TabOn = Color3.fromRGB(207,239,250), TabOff = Color3.fromRGB(235,248,255),
+        Gradient = {Color3.fromRGB(207,244,255),Color3.fromRGB(215,226,255),Color3.fromRGB(205,249,240)},
+    },
+    {
+        Name = "Aurora", Dark = true,
+        Main = Color3.fromRGB(18,25,31), Stroke = Color3.fromRGB(75,125,125),
+        Surface = Color3.fromRGB(28,37,42), List = Color3.fromRGB(22,31,36), Button = Color3.fromRGB(38,50,55),
+        Text = Color3.fromRGB(232,247,243), Muted = Color3.fromRGB(158,188,181),
+        TabOn = Color3.fromRGB(45,78,78), TabOff = Color3.fromRGB(38,50,55),
+        Gradient = {Color3.fromRGB(27,78,75),Color3.fromRGB(47,38,86),Color3.fromRGB(20,70,58)},
+    },
+    {
+        Name = "Sunset", Dark = false,
+        Main = Color3.fromRGB(255,247,241), Stroke = Color3.fromRGB(235,200,185),
+        Surface = Color3.fromRGB(255,255,255), List = Color3.fromRGB(255,251,247), Button = Color3.fromRGB(255,242,232),
+        Text = Color3.fromRGB(72,49,43), Muted = Color3.fromRGB(132,102,91),
+        TabOn = Color3.fromRGB(249,220,202), TabOff = Color3.fromRGB(255,242,232),
+        Gradient = {Color3.fromRGB(255,222,198),Color3.fromRGB(255,214,231),Color3.fromRGB(226,222,255)},
+    },
+    {
+        Name = "Midnight", Dark = true,
+        Main = Color3.fromRGB(16,18,29), Stroke = Color3.fromRGB(78,82,125),
+        Surface = Color3.fromRGB(27,29,43), List = Color3.fromRGB(21,23,36), Button = Color3.fromRGB(37,39,57),
+        Text = Color3.fromRGB(237,237,255), Muted = Color3.fromRGB(161,164,194),
+        TabOn = Color3.fromRGB(57,59,91), TabOff = Color3.fromRGB(37,39,57),
+        Gradient = {Color3.fromRGB(34,40,91),Color3.fromRGB(67,35,93),Color3.fromRGB(24,62,88)},
+    },
+    {
+        Name = "Emerald Night", Dark = true,
+        Main = Color3.fromRGB(15,27,24), Stroke = Color3.fromRGB(65,116,94),
+        Surface = Color3.fromRGB(25,40,35), List = Color3.fromRGB(19,33,29), Button = Color3.fromRGB(35,54,47),
+        Text = Color3.fromRGB(232,247,238), Muted = Color3.fromRGB(155,187,169),
+        TabOn = Color3.fromRGB(43,76,62), TabOff = Color3.fromRGB(35,54,47),
+        Gradient = {Color3.fromRGB(18,78,62),Color3.fromRGB(36,49,89),Color3.fromRGB(19,92,68)},
+    },
+    {
+        Name = "Cherry Noir", Dark = true,
+        Main = Color3.fromRGB(29,16,23), Stroke = Color3.fromRGB(132,67,91),
+        Surface = Color3.fromRGB(42,23,32), List = Color3.fromRGB(33,18,26), Button = Color3.fromRGB(58,30,43),
+        Text = Color3.fromRGB(250,235,241), Muted = Color3.fromRGB(194,151,168),
+        TabOn = Color3.fromRGB(87,42,61), TabOff = Color3.fromRGB(58,30,43),
+        Gradient = {Color3.fromRGB(105,30,64),Color3.fromRGB(62,27,76),Color3.fromRGB(116,39,47)},
+    },
+}
+
+local function getTheme()
+    local index = math.clamp(tonumber(State.ThemeIndex) or 1, 1, #ThemePresets)
+    State.ThemeIndex = index
+    State.Dark = ThemePresets[index].Dark == true
+    return ThemePresets[index]
+end
 
 --==============================================================
 -- HELPERS
@@ -374,6 +448,12 @@ local function loadSaved()
             end
         end
 
+        local savedTheme = tonumber(decoded.themeIndex)
+        if savedTheme and savedTheme >= 1 and savedTheme <= #ThemePresets then
+            State.ThemeIndex = math.floor(savedTheme)
+            State.Dark = ThemePresets[State.ThemeIndex].Dark == true
+        end
+
         local friendSettings = decoded.friendSettings
         if type(friendSettings) == "table" then
             State.FriendSettings.AutoAccept = friendSettings.autoAccept == true
@@ -396,6 +476,7 @@ saveData = function()
                 favorites = State.Favorites,
                 recent = State.Recent,
                 searchHistory = State.SearchHistory,
+                themeIndex = State.ThemeIndex,
                 keybinds = State.Keybinds,
                 friendSettings = {
                     autoAccept = State.FriendSettings.AutoAccept,
@@ -1874,6 +1955,50 @@ addSettingToggle("Stop Other Animations On Play","StopOtherAnimations")
 addSettingToggle("High Priority","HighPriority")
 addSettingToggle("Freeze On Finish","FreezeOnFinish")
 
+local ThemeRow = create("Frame", {
+    Size = UDim2.new(1,-6,0,42),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BorderSizePixel = 0,
+    LayoutOrder = 14,
+}, SettingsFrame)
+corner(ThemeRow,9)
+stroke(ThemeRow,Color3.fromRGB(220,205,230),1,0.18)
+
+local ThemeLabel = create("TextLabel", {
+    Size = UDim2.new(1,-150,1,0),
+    Position = UDim2.fromOffset(10,0),
+    BackgroundTransparency = 1,
+    Text = "Theme",
+    TextColor3 = Color3.fromRGB(65,55,75),
+    Font = Enum.Font.GothamMedium,
+    TextSize = 11,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, ThemeRow)
+
+local ThemeCycleButton = makeButton(ThemeRow,"Sakura Dream",UDim2.new(1,-132,0.5,-13),UDim2.fromOffset(122,26))
+ThemeCycleButton.TextSize = 8
+
+local function refreshThemeControls()
+    local theme = getTheme()
+    ThemeCycleButton.Text = theme.Name
+    ThemeButton.Text = theme.Dark and "☀" or "🌙"
+end
+
+local function cycleTheme(step)
+    local count = #ThemePresets
+    State.ThemeIndex = ((State.ThemeIndex - 1 + step) % count) + 1
+    State.Dark = ThemePresets[State.ThemeIndex].Dark == true
+    saveData()
+    refreshThemeControls()
+    if applyTheme then applyTheme() end
+    setTab(State.Tab)
+    toast("Theme • " .. ThemePresets[State.ThemeIndex].Name)
+end
+
+ThemeCycleButton.MouseButton1Click:Connect(function()
+    cycleTheme(1)
+end)
+
 local KeybindInfo = create("TextLabel", {
     Size = UDim2.new(1,-6,0,42),
     BackgroundColor3 = Color3.fromRGB(255,255,255),
@@ -2985,8 +3110,6 @@ SyncSettingButton.MouseButton1Click:Connect(function()
     toast(value and "Friend sync enabled" or "Friend sync disabled")
 end)
 
-local setTab
-
 setTab = function(tab)
     State.Tab = tab
 
@@ -3020,6 +3143,9 @@ FriendsTab.MouseButton1Click:Connect(function() setTab("Friends") end)
 SettingsTab.MouseButton1Click:Connect(function() setTab("Settings") end)
 
 ResetButton.MouseButton1Click:Connect(function()
+    State.ThemeIndex = 1
+    State.Dark = false
+    if refreshThemeControls then refreshThemeControls() end
     Settings.Speed = 1
     Settings.TimePosition = 0
     Settings.Weight = 1
@@ -3043,15 +3169,8 @@ AnchorButton.MouseButton1Click:Connect(function()
     AnchorButton.Text = State.Anchored and "🔒" or "🔓"
 end)
 
-local applyTheme
-
 ThemeButton.MouseButton1Click:Connect(function()
-    State.Dark = not State.Dark
-    ThemeButton.Text = State.Dark and "☀" or "🌙"
-    if applyTheme then
-        applyTheme()
-    end
-    setTab(State.Tab)
+    cycleTheme(1)
 end)
 
 --==============================================================
@@ -3251,19 +3370,19 @@ end)
 -- THEME / ANIMATION
 --==============================================================
 applyTheme = function()
-    local dark = State.Dark
-    local surface = dark and Color3.fromRGB(31,27,36) or Color3.fromRGB(255,255,255)
-    local listSurface = dark and Color3.fromRGB(27,24,31) or Color3.fromRGB(255,255,255)
-    local buttonSurface = dark and Color3.fromRGB(42,37,49) or Color3.fromRGB(255,248,253)
-    local text = dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(55,47,65)
-    local muted = dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(116,108,130)
+    local theme = getTheme()
+    local surface = theme.Surface
+    local listSurface = theme.List
+    local buttonSurface = theme.Button
+    local text = theme.Text
+    local muted = theme.Muted
 
-    Main.BackgroundColor3 = dark and Color3.fromRGB(20,17,24) or Color3.fromRGB(248,245,255)
-    MainStroke.Color = dark and Color3.fromRGB(160,104,132) or Color3.fromRGB(220,205,230)
-    Title.TextColor3 = dark and Color3.fromRGB(242,235,246) or Color3.fromRGB(53,49,67)
+    Main.BackgroundColor3 = theme.Main
+    MainStroke.Color = theme.Stroke
+    Title.TextColor3 = text
     Subtitle.TextColor3 = muted
     Search.BackgroundColor3 = surface
-    Search.BackgroundTransparency = dark and 0.02 or 0
+    Search.BackgroundTransparency = theme.Dark and 0.02 or 0
     Search.TextColor3 = text
     Search.PlaceholderColor3 = muted
     List.BackgroundColor3 = listSurface
@@ -3271,10 +3390,10 @@ applyTheme = function()
     PlaybackName.TextColor3 = text
     PlaybackTime.TextColor3 = muted
     CatalogStatus.TextColor3 = muted
-    PlaybackProgress.BackgroundColor3 = dark and Color3.fromRGB(62,55,68) or Color3.fromRGB(232,224,238)
+    PlaybackProgress.BackgroundColor3 = theme.Dark and Color3.fromRGB(62,55,68) or Color3.fromRGB(232,224,238)
     PageBox.BackgroundColor3 = surface
     PageBox.TextColor3 = text
-    SearchIcon.Image = dark and SEARCH_WHITE or SEARCH_BLACK
+    SearchIcon.Image = theme.Dark and SEARCH_WHITE or SEARCH_BLACK
     SearchHistoryFrame.BackgroundColor3 = surface
     SearchHistoryTitle.TextColor3 = muted
     FavoritesSearch.BackgroundColor3 = surface
@@ -3285,10 +3404,18 @@ applyTheme = function()
     RecentSearch.PlaceholderColor3 = muted
     FriendsInfo.TextColor3 = muted
     FriendsList.BackgroundColor3 = listSurface
+    ThemeRow.BackgroundColor3 = surface
+    ThemeLabel.TextColor3 = text
+    ThemeCycleButton.BackgroundColor3 = buttonSurface
+    ThemeCycleButton.TextColor3 = text
 
     for _,button in ipairs({CatalogTab,FavoritesTab,RecentTab,FriendsTab,SettingsTab,RefreshButton,SortButton,AddIdButton,SearchClear,SearchHistoryClear,FavoritesClear,RecentClear,Prev,Next,AnchorButton,ThemeButton,CloseButton,PlaybackPause,PlaybackStop,PlaybackLoop}) do
         button.BackgroundColor3 = buttonSurface
         button.TextColor3 = text
+    end
+
+    for _,entry in ipairs({{CatalogTab,"Catalog"},{FavoritesTab,"Favorites"},{RecentTab,"Recent"},{FriendsTab,"Friends"},{SettingsTab,"Settings"}}) do
+        entry[1].BackgroundColor3 = State.Tab == entry[2] and theme.TabOn or theme.TabOff
     end
 
     for _,row in ipairs(SettingsFrame:GetChildren()) do
@@ -3332,29 +3459,27 @@ applyTheme = function()
     for _,container in ipairs({FavoritesFrame,RecentFrame,FriendsFrame}) do
         local empty = container:FindFirstChild("CollectionEmpty")
         if empty and empty:IsA("TextLabel") then
-            empty.TextColor3 = dark and Color3.fromRGB(171,163,185) or Color3.fromRGB(115,105,125)
+            empty.TextColor3 = muted
         end
     end
 end
 
+refreshThemeControls()
 applyTheme()
 
 RunService.RenderStepped:Connect(function(dt)
     State.GradientTime += dt
-    Gradient.Offset = Vector2.new(math.sin(State.GradientTime * 0.7) * 0.48,0)
-    if State.Dark then
-        Gradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,Color3.fromRGB(76,34,82)),
-            ColorSequenceKeypoint.new(0.45,Color3.fromRGB(35,24,58)),
-            ColorSequenceKeypoint.new(1,Color3.fromRGB(28,64,56)),
-        })
-    else
-        Gradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,Color3.fromRGB(255,226,241)),
-            ColorSequenceKeypoint.new(0.48,Color3.fromRGB(235,226,255)),
-            ColorSequenceKeypoint.new(1,Color3.fromRGB(213,249,239)),
-        })
-    end
+    local theme = getTheme()
+    local phase = State.GradientTime * 0.7
+    local x = math.sin(phase) * 0.48
+    local y = math.cos(phase * 0.63) * 0.18
+    Gradient.Offset = Vector2.new(x,y)
+    local colors = theme.Gradient
+    Gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0,colors[1]),
+        ColorSequenceKeypoint.new(0.5,colors[2]),
+        ColorSequenceKeypoint.new(1,colors[3]),
+    })
 end)
 
 setEffectsForMain(not State.Hidden)
