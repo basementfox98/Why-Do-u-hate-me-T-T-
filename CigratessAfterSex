@@ -3627,9 +3627,16 @@ print("[SAIKI EMOTES] Gaze Edition loaded.")
         msg.Text="LOAD ERROR\nloadstring/load is unavailable in this executor."
         return
     end
-    local ok,chunk = pcall(loader,source)
-    if not ok or type(chunk) ~= "function" then
-        msg.Text="COMPILE ERROR\n" .. tostring(chunk)
+    local ok,chunk,compileErr = pcall(loader,source)
+    if not ok then
+        msg.Text="COMPILE CALL ERROR\n" .. tostring(chunk)
+        warn("[SAIKI EMOTES] compiler call error: " .. tostring(chunk))
+        return
+    end
+    if type(chunk) ~= "function" then
+        local detail = compileErr or chunk or "unknown compiler error"
+        msg.Text="COMPILE ERROR\n" .. tostring(detail)
+        warn("[SAIKI EMOTES] compile error: " .. tostring(detail))
         return
     end
     local ran,err = xpcall(chunk,function(e) return debug and debug.traceback and debug.traceback(tostring(e),2) or tostring(e) end)
