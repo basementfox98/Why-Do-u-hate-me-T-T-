@@ -862,8 +862,8 @@ do
         local function addSocialButton(name, x, url, imageUrl, fallbackText)
             local b = Instance.new("TextButton")
             b.Name = name
-            b.Size = UDim2.fromOffset(28, 28)
-            b.Position = UDim2.fromOffset(x, 10)
+            b.Size = UDim2.fromOffset(30, 30)
+            b.Position = UDim2.fromOffset(x, 6)
             b.BackgroundColor3 = BLACK_2
             b.BackgroundTransparency = 0.08
             b.BorderSizePixel = 0
@@ -889,7 +889,7 @@ do
             icon.Name = "Icon"
             icon.AnchorPoint = Vector2.new(0.5, 0.5)
             icon.Position = UDim2.fromScale(0.5, 0.5)
-            icon.Size = UDim2.fromOffset(17, 17)
+            icon.Size = UDim2.fromOffset(19, 19)
             icon.BackgroundTransparency = 1
             icon.Image = ""
             icon.ScaleType = Enum.ScaleType.Fit
@@ -938,7 +938,7 @@ do
         end
 
         addSocialButton("InstagramButton", 278, "https://www.instagram.com/saiki_hu_lol/", SOCIAL_INSTAGRAM_IMAGE, "IG")
-        addSocialButton("DiscordButton", 310, "https://discord.gg/eWC3CSxkQM", SOCIAL_DISCORD_IMAGE, "DC")
+        addSocialButton("DiscordButton", 312, "https://discord.gg/eWC3CSxkQM", SOCIAL_DISCORD_IMAGE, "DC")
     end)
 end
 
