@@ -850,99 +850,16 @@ local Subtitle = New("TextLabel", {
 }, Header)
 
 --============================================================
--- SOCIAL BUTTONS (matched to Saiki Music)
+-- SOCIAL BUTTONS
+-- Lightweight approach: use native TextButtons instead of downloading
+-- external image files. This avoids HTTP/request/writefile failures.
 --============================================================
-local SOCIAL_INSTAGRAM_IMAGE = "https://raw.githubusercontent.com/thedevilondiscord/Why-Do-u-hate-me-T-T-/main/icons8-instagram-48.png"
-local SOCIAL_DISCORD_IMAGE = "https://raw.githubusercontent.com/thedevilondiscord/Why-Do-u-hate-me-T-T-/main/dx.jpg"
 local SOCIAL_INSTAGRAM_URL = "https://www.instagram.com/saiki_hu_lol/"
 local SOCIAL_DISCORD_URL = "https://discord.gg/eWC3CSxkQM"
 
-local function SocialRequest()
-    return (syn and syn.request) or (http and http.request) or http_request or request
-end
-
-local function DownloadSocialAsset(url, fileName)
-    local req = SocialRequest()
-    if type(req) ~= "function" or type(writefile) ~= "function" or type(getcustomasset) ~= "function" then
-        return nil
-    end
-
-    local ok, res = pcall(function()
-        return req({Url = url, Method = "GET"})
-    end)
-    if not ok or not res or type(res.Body) ~= "string" or #res.Body == 0 then
-        return nil
-    end
-
-    local wrote = pcall(function()
-        if type(isfile) == "function" and isfile(fileName) and type(delfile) == "function" then
-            delfile(fileName)
-        end
-        writefile(fileName, res.Body)
-    end)
-    if not wrote then
-        return nil
-    end
-
-    local okAsset, asset = pcall(function()
-        return getcustomasset(fileName)
-    end)
-    return okAsset and asset or nil
-end
-
-local function MakeSocialButton(name, imageUrl, x, fileName)
-    local button = New("ImageButton", {
-        Name = name,
-        Position = UDim2.fromOffset(x, 9),
-        Size = UDim2.fromOffset(30, 30),
-        BackgroundColor3 = BLACK_2,
-        BackgroundTransparency = 0.05,
-        BorderSizePixel = 0,
-        AutoButtonColor = false,
-        Image = "",
-        ScaleType = Enum.ScaleType.Fit,
-        ZIndex = 8,
-        Active = true,
-    }, Header)
-    Corner(button, 10)
-    local buttonStroke = Stroke(button, DARK_RED, 1)
-
-    local asset = DownloadSocialAsset(imageUrl, fileName)
-    if asset then
-        button.Image = asset
-    end
-
-    button.MouseEnter:Connect(function()
-        button.BackgroundTransparency = 0.0
-        buttonStroke.Transparency = 0
-    end)
-    button.MouseLeave:Connect(function()
-        button.BackgroundTransparency = 0.05
-        buttonStroke.Transparency = 0
-    end)
-
-    return button
-end
-
--- The title ends at X=274. The two 30px buttons start immediately after it.
-local InstagramButton = MakeSocialButton(
-    "InstagramButton",
-    SOCIAL_INSTAGRAM_IMAGE,
-    280,
-    "saiki_instagram_icon.png"
-)
-
-local DiscordButton = MakeSocialButton(
-    "DiscordButton",
-    SOCIAL_DISCORD_IMAGE,
-    316,
-    "saiki_discord_cover.jpg"
-)
-
 local function CopySocialLink(url, label)
-    local fn = setclipboard or toclipboard or set_clipboard
     local copied = false
-
+    local fn = setclipboard or toclipboard or set_clipboard
     if type(fn) == "function" then
         copied = pcall(fn, url)
     elseif syn and type(syn.write_clipboard) == "function" then
@@ -950,14 +867,58 @@ local function CopySocialLink(url, label)
     end
 
     if copied then
-        pcall(function()
-            game:GetService("StarterGui"):SetCore("SendNotification", {
-                Title = "SAIKI EMOTES",
-                Text = "Copied " .. label .. " link",
-                Duration = 3,
-            })
-        end)
+        if Settings.Notifications then
+            -- Notification helper may be declared later, so defer the call.
+            task.defer(function()
+                pcall(function()
+                    if notify then notify("SAIKI EMOTES", label .. " link copied") end
+                end)
+            end)
+        end
     end
+end
+
+local InstagramButton = New("TextButton", {
+    Name = "InstagramButton",
+    Position = UDim2.fromOffset(278, 9),
+    Size = UDim2.fromOffset(30, 30),
+    BackgroundColor3 = BLACK_2,
+    BackgroundTransparency = 0.05,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Font = BOLD,
+    Text = "IG",
+    TextSize = 9,
+    TextColor3 = WHITE,
+    ZIndex = 8,
+}, Header)
+Corner(InstagramButton, 10)
+local InstagramStroke = Stroke(InstagramButton, DARK_RED, 1)
+
+local DiscordButton = New("TextButton", {
+    Name = "DiscordButton",
+    Position = UDim2.fromOffset(314, 9),
+    Size = UDim2.fromOffset(30, 30),
+    BackgroundColor3 = BLACK_2,
+    BackgroundTransparency = 0.05,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Font = BOLD,
+    Text = "DC",
+    TextSize = 8,
+    TextColor3 = WHITE,
+    ZIndex = 8,
+}, Header)
+Corner(DiscordButton, 10)
+local DiscordStroke = Stroke(DiscordButton, DARK_RED, 1)
+
+for _, button in ipairs({InstagramButton, DiscordButton}) do
+    button.MouseEnter:Connect(function()
+        button.BackgroundTransparency = 0
+    end)
+    button.MouseLeave:Connect(function()
+        button.BackgroundTransparency = 0.05
+    end)
 end
 
 InstagramButton.Activated:Connect(function()
