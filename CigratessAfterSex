@@ -47,18 +47,20 @@ end
 
 local ThemeDefinitions = {
     ["Blood"] = {
-        BLACK = Color3.fromRGB(9, 9, 11),
-        BLACK_2 = Color3.fromRGB(17, 17, 20),
-        GLASS = Color3.fromRGB(23, 20, 23),
-        GLASS_2 = Color3.fromRGB(34, 27, 31),
-        HIGHLIGHT = Color3.fromRGB(52, 45, 49),
-        ACCENT = Color3.fromRGB(157, 27, 47),
-        BRIGHT = Color3.fromRGB(222, 51, 72),
-        DARK = Color3.fromRGB(79, 19, 31),
-        WHITE = Color3.fromRGB(246, 244, 246),
-        SOFT = Color3.fromRGB(205, 201, 205),
-        MUTED = Color3.fromRGB(139, 134, 141),
-        STAR = Color3.fromRGB(91, 87, 94),
+        -- Restored to the original Saiki red/black glass palette from before
+        -- the additional theme set was introduced.
+        BLACK = Color3.fromRGB(5, 5, 7),
+        BLACK_2 = Color3.fromRGB(10, 8, 11),
+        GLASS = Color3.fromRGB(24, 14, 18),
+        GLASS_2 = Color3.fromRGB(35, 16, 21),
+        HIGHLIGHT = Color3.fromRGB(68, 28, 36),
+        ACCENT = Color3.fromRGB(235, 42, 62),
+        BRIGHT = Color3.fromRGB(255, 58, 78),
+        DARK = Color3.fromRGB(92, 18, 29),
+        WHITE = Color3.fromRGB(250, 247, 249),
+        SOFT = Color3.fromRGB(222, 218, 221),
+        MUTED = Color3.fromRGB(151, 137, 142),
+        STAR = Color3.fromRGB(111, 100, 105),
     },
 
     ["Snow"] = {
@@ -944,8 +946,8 @@ local GridHolder = New("ScrollingFrame", {
 
 local CopyScroll = New("ScrollingFrame", {
     Name = "CopyPlayerList",
-    Position = UDim2.fromOffset(10, 50),
-    Size = UDim2.new(1, -20, 1, -94),
+    Position = UDim2.fromOffset(10, 88),
+    Size = UDim2.new(1, -20, 1, -132),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     CanvasSize = UDim2.fromOffset(0, 0),
@@ -960,6 +962,23 @@ local CopyList = New("UIListLayout", {
     Padding = UDim.new(0, 6),
     SortOrder = Enum.SortOrder.LayoutOrder,
 }, CopyScroll)
+
+local CopyRefreshButton = New("TextButton", {
+    Name = "RefreshCopyPlayers",
+    Position = UDim2.fromOffset(10, 55),
+    Size = UDim2.fromOffset(82, 27),
+    BackgroundColor3 = BLACK_2,
+    BackgroundTransparency = 0.08,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Font = BOLD,
+    Text = "↻ REFRESH",
+    TextSize = 8,
+    TextColor3 = WHITE,
+    ZIndex = 8,
+}, Glass)
+Corner(CopyRefreshButton, 7)
+local CopyRefreshStroke = Stroke(CopyRefreshButton, DARK_RED, 1)
 
 local CopyEmpty = New("TextLabel", {
     AnchorPoint = Vector2.new(0.5, 0.5),
@@ -1128,6 +1147,25 @@ local function RefreshCopyPlayerList()
         task.defer(RenderCopyPlayers)
     end
 end
+
+local RefreshingCopyPlayers = false
+CopyRefreshButton.MouseButton1Click:Connect(function()
+    if RefreshingCopyPlayers then return end
+    RefreshingCopyPlayers = true
+
+    -- Clear cached thumbnails so a manual refresh also updates avatars.
+    table.clear(CopyThumbnailCache)
+    RenderCopyPlayers()
+
+    -- Small visual feedback without adding another notification.
+    CopyRefreshButton.Text = "↻ REFRESHED"
+    task.delay(0.65, function()
+        if CopyRefreshButton and CopyRefreshButton.Parent then
+            CopyRefreshButton.Text = "↻ REFRESH"
+        end
+        RefreshingCopyPlayers = false
+    end)
+end)
 
 Players.PlayerAdded:Connect(function(player)
     task.defer(function()
@@ -2494,6 +2532,7 @@ local function SelectTab(tab)
     SearchHolder.Visible = emotesActive
     GridHolder.Visible = emotesActive or favoritesActive
     CopyScroll.Visible = copyActive
+    CopyRefreshButton.Visible = copyActive
     SettingsScroll.Visible = settingsActive
 
     if emotesActive then
@@ -2651,6 +2690,8 @@ local function RefreshThemeChrome()
     Loop.BackgroundColor3 = Settings.Looped and t.ACCENT or t.BLACK_2
     ResetSettingsButton.BackgroundColor3 = t.ACCENT
     ThemeValue.TextColor3 = t.ACCENT
+    CopyRefreshButton.BackgroundColor3 = t.BLACK_2
+    CopyRefreshStroke.Color = t.DARK
     RefreshActiveTabGradient()
 end
 
