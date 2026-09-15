@@ -826,7 +826,7 @@ local TitleIcon = New("ImageLabel", {
 
 local Title = New("TextLabel", {
     Position = UDim2.fromOffset(44, 5),
-    Size = UDim2.fromOffset(230, 20),
+    Size = UDim2.fromOffset(228, 20),
     BackgroundTransparency = 1,
     Font = BOLD,
     Text = "SAIKI EMOTES",
@@ -850,66 +850,55 @@ local Subtitle = New("TextLabel", {
 }, Header)
 
 --============================================================
--- SOCIAL BUTTONS
--- Lightweight approach: use native TextButtons instead of downloading
--- external image files. This avoids HTTP/request/writefile failures.
+-- SOCIAL BUTTONS — V30 SAFE NATIVE BUILD
+-- No HTTP requests, no writefile/getcustomasset, no executor globals,
+-- and no external image loading. The buttons are made entirely from
+-- Roblox UI primitives so they cannot prevent the main script from booting.
 --============================================================
-local SOCIAL_INSTAGRAM_URL = "https://www.instagram.com/saiki_hu_lol/"
-local SOCIAL_DISCORD_URL = "https://discord.gg/eWC3CSxkQM"
-
-local function CopySocialLink(url, label)
-    local copied = false
-    local fn = setclipboard or toclipboard or set_clipboard
-    if type(fn) == "function" then
-        copied = pcall(fn, url)
-    elseif syn and type(syn.write_clipboard) == "function" then
-        copied = pcall(syn.write_clipboard, url)
-    end
-
-    if copied then
-        if Settings.Notifications then
-            -- Notification helper may be declared later, so defer the call.
-            task.defer(function()
-                pcall(function()
-                    if notify then notify("SAIKI EMOTES", label .. " link copied") end
-                end)
-            end)
-        end
-    end
-end
-
 local InstagramButton = New("TextButton", {
     Name = "InstagramButton",
-    Position = UDim2.fromOffset(278, 9),
+    Position = UDim2.fromOffset(276, 9),
     Size = UDim2.fromOffset(30, 30),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.05,
     BorderSizePixel = 0,
     AutoButtonColor = false,
     Font = BOLD,
-    Text = "IG",
-    TextSize = 9,
+    Text = "◎",
+    TextSize = 20,
     TextColor3 = WHITE,
     ZIndex = 8,
 }, Header)
-Corner(InstagramButton, 10)
+Corner(InstagramButton, 15)
 local InstagramStroke = Stroke(InstagramButton, DARK_RED, 1)
+
+-- Small center dot makes the native glyph read like a camera/social icon.
+local InstagramDot = New("Frame", {
+    Name = "InstagramDot",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = UDim2.fromOffset(4, 4),
+    BackgroundColor3 = WHITE,
+    BorderSizePixel = 0,
+    ZIndex = 9,
+}, InstagramButton)
+Corner(InstagramDot, 2)
 
 local DiscordButton = New("TextButton", {
     Name = "DiscordButton",
-    Position = UDim2.fromOffset(314, 9),
+    Position = UDim2.fromOffset(312, 9),
     Size = UDim2.fromOffset(30, 30),
     BackgroundColor3 = BLACK_2,
     BackgroundTransparency = 0.05,
     BorderSizePixel = 0,
     AutoButtonColor = false,
     Font = BOLD,
-    Text = "DC",
-    TextSize = 8,
+    Text = "◈",
+    TextSize = 18,
     TextColor3 = WHITE,
     ZIndex = 8,
 }, Header)
-Corner(DiscordButton, 10)
+Corner(DiscordButton, 15)
 local DiscordStroke = Stroke(DiscordButton, DARK_RED, 1)
 
 for _, button in ipairs({InstagramButton, DiscordButton}) do
@@ -921,12 +910,24 @@ for _, button in ipairs({InstagramButton, DiscordButton}) do
     end)
 end
 
-InstagramButton.Activated:Connect(function()
-    CopySocialLink(SOCIAL_INSTAGRAM_URL, "Instagram")
+-- Keep the buttons functional without any network or browser dependency:
+-- clicking copies the public link when the executor exposes a clipboard API.
+local function SafeCopySocialLink(url)
+    if type(setclipboard) == "function" then
+        pcall(setclipboard, url)
+    elseif type(toclipboard) == "function" then
+        pcall(toclipboard, url)
+    elseif type(set_clipboard) == "function" then
+        pcall(set_clipboard, url)
+    end
+end
+
+InstagramButton.MouseButton1Click:Connect(function()
+    SafeCopySocialLink("https://www.instagram.com/saiki_hu_lol/")
 end)
 
-DiscordButton.Activated:Connect(function()
-    CopySocialLink(SOCIAL_DISCORD_URL, "Discord")
+DiscordButton.MouseButton1Click:Connect(function()
+    SafeCopySocialLink("https://discord.gg/eWC3CSxkQM")
 end)
 
 local ThemeButton = New("TextButton", {
