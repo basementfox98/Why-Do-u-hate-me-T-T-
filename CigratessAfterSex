@@ -1714,7 +1714,7 @@ local Minus = New("TextButton", {
     AutoButtonColor = false,
     Font = BOLD,
     Text = "−",
-    TextSize = 15,
+    TextSize = 20,
     TextColor3 = WHITE,
     ZIndex = 52,
 }, HudInner)
@@ -1728,7 +1728,7 @@ local Plus = New("TextButton", {
     AutoButtonColor = false,
     Font = BOLD,
     Text = "+",
-    TextSize = 15,
+    TextSize = 20,
     TextColor3 = WHITE,
     ZIndex = 52,
 }, HudInner)
@@ -1742,7 +1742,7 @@ local Loop = New("TextButton", {
     AutoButtonColor = false,
     Font = BOLD,
     Text = "LOOP",
-    TextSize = 7,
+    TextSize = 9,
     TextColor3 = WHITE,
     ZIndex = 52,
 }, HudInner)
@@ -1756,11 +1756,25 @@ local Pause = New("TextButton", {
     AutoButtonColor = false,
     Font = BOLD,
     Text = "II",
-    TextSize = 9,
+    TextSize = 15,
     TextColor3 = WHITE,
     ZIndex = 52,
 }, HudInner)
 Corner(Pause, 6)
+
+local FavoriteHUD = New("TextButton", {
+    Position = UDim2.new(1, -249, 0, 8),
+    Size = UDim2.fromOffset(38, 30),
+    BackgroundColor3 = BLACK_2,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Font = BOLD,
+    Text = "☆",
+    TextSize = 20,
+    TextColor3 = STAR_OFF,
+    ZIndex = 52,
+}, HudInner)
+Corner(FavoriteHUD, 6)
 
 local Stop = New("TextButton", {
     Position = UDim2.new(1, -46, 0, 8),
@@ -1770,11 +1784,19 @@ local Stop = New("TextButton", {
     AutoButtonColor = false,
     Font = BOLD,
     Text = "■",
-    TextSize = 11,
+    TextSize = 17,
     TextColor3 = WHITE,
     ZIndex = 52,
 }, HudInner)
 Corner(Stop, 6)
+
+FavoriteHUD.MouseButton1Click:Connect(function()
+    if not CurrentEmote or not CurrentEmote.id then return end
+    ToggleFavorite(CurrentEmote.id)
+    local active = IsFavorite(CurrentEmote.id)
+    FavoriteHUD.Text = active and "★" or "☆"
+    FavoriteHUD.TextColor3 = active and RED or STAR_OFF
+end)
 
 --============================================================
 -- EMOTE PLAYBACK
