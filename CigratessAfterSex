@@ -826,7 +826,7 @@ local TitleIcon = New("ImageLabel", {
 
 local Title = New("TextLabel", {
     Position = UDim2.fromOffset(44, 5),
-    Size = UDim2.fromOffset(228, 20),
+    Size = UDim2.fromOffset(230, 20),
     BackgroundTransparency = 1,
     Font = BOLD,
     Text = "SAIKI EMOTES",
@@ -850,85 +850,63 @@ local Subtitle = New("TextLabel", {
 }, Header)
 
 --============================================================
--- SOCIAL BUTTONS — V30 SAFE NATIVE BUILD
--- No HTTP requests, no writefile/getcustomasset, no executor globals,
--- and no external image loading. The buttons are made entirely from
--- Roblox UI primitives so they cannot prevent the main script from booting.
+-- SAIKI SOCIAL BUTTONS — ISOLATED / FAIL-SAFE
+-- This block is completely isolated from the core GUI boot path.
+-- If anything about the optional social controls fails in an executor,
+-- the error is swallowed and the rest of Saiki Emotes continues loading.
+-- No HTTP, request, writefile, getcustomasset, or external image is used.
 --============================================================
-local InstagramButton = New("TextButton", {
-    Name = "InstagramButton",
-    Position = UDim2.fromOffset(276, 9),
-    Size = UDim2.fromOffset(30, 30),
-    BackgroundColor3 = BLACK_2,
-    BackgroundTransparency = 0.05,
-    BorderSizePixel = 0,
-    AutoButtonColor = false,
-    Font = BOLD,
-    Text = "◎",
-    TextSize = 20,
-    TextColor3 = WHITE,
-    ZIndex = 8,
-}, Header)
-Corner(InstagramButton, 15)
-local InstagramStroke = Stroke(InstagramButton, DARK_RED, 1)
+do
+    local ok = pcall(function()
+        local function addSocialButton(name, text, x, url)
+            local b = Instance.new("TextButton")
+            b.Name = name
+            b.Size = UDim2.fromOffset(28, 28)
+            b.Position = UDim2.fromOffset(x, 10)
+            b.BackgroundColor3 = BLACK_2
+            b.BackgroundTransparency = 0.08
+            b.BorderSizePixel = 0
+            b.AutoButtonColor = false
+            b.Text = text
+            b.Font = Enum.Font.GothamBold
+            b.TextSize = 10
+            b.TextColor3 = WHITE
+            b.ZIndex = 8
+            b.Parent = Header
 
--- Small center dot makes the native glyph read like a camera/social icon.
-local InstagramDot = New("Frame", {
-    Name = "InstagramDot",
-    AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(4, 4),
-    BackgroundColor3 = WHITE,
-    BorderSizePixel = 0,
-    ZIndex = 9,
-}, InstagramButton)
-Corner(InstagramDot, 2)
+            local c = Instance.new("UICorner")
+            c.CornerRadius = UDim.new(0, 9)
+            c.Parent = b
 
-local DiscordButton = New("TextButton", {
-    Name = "DiscordButton",
-    Position = UDim2.fromOffset(312, 9),
-    Size = UDim2.fromOffset(30, 30),
-    BackgroundColor3 = BLACK_2,
-    BackgroundTransparency = 0.05,
-    BorderSizePixel = 0,
-    AutoButtonColor = false,
-    Font = BOLD,
-    Text = "◈",
-    TextSize = 18,
-    TextColor3 = WHITE,
-    ZIndex = 8,
-}, Header)
-Corner(DiscordButton, 15)
-local DiscordStroke = Stroke(DiscordButton, DARK_RED, 1)
+            local st = Instance.new("UIStroke")
+            st.Thickness = 1
+            st.Transparency = 0.15
+            st.Color = DARK_RED
+            st.Parent = b
 
-for _, button in ipairs({InstagramButton, DiscordButton}) do
-    button.MouseEnter:Connect(function()
-        button.BackgroundTransparency = 0
-    end)
-    button.MouseLeave:Connect(function()
-        button.BackgroundTransparency = 0.05
+            b.MouseEnter:Connect(function()
+                b.BackgroundTransparency = 0
+            end)
+            b.MouseLeave:Connect(function()
+                b.BackgroundTransparency = 0.08
+            end)
+
+            -- Only copy the link if a supported clipboard function exists.
+            b.Activated:Connect(function()
+                pcall(function()
+                    local fn = setclipboard or toclipboard or set_clipboard
+                    if type(fn) == "function" then
+                        fn(url)
+                    end
+                end)
+            end)
+        end
+
+        -- Title ends around x=274, so these sit directly beside it.
+        addSocialButton("InstagramButton", "IG", 278, "https://www.instagram.com/saiki_hu_lol/")
+        addSocialButton("DiscordButton", "DC", 310, "https://discord.gg/eWC3CSxkQM")
     end)
 end
-
--- Keep the buttons functional without any network or browser dependency:
--- clicking copies the public link when the executor exposes a clipboard API.
-local function SafeCopySocialLink(url)
-    if type(setclipboard) == "function" then
-        pcall(setclipboard, url)
-    elseif type(toclipboard) == "function" then
-        pcall(toclipboard, url)
-    elseif type(set_clipboard) == "function" then
-        pcall(set_clipboard, url)
-    end
-end
-
-InstagramButton.MouseButton1Click:Connect(function()
-    SafeCopySocialLink("https://www.instagram.com/saiki_hu_lol/")
-end)
-
-DiscordButton.MouseButton1Click:Connect(function()
-    SafeCopySocialLink("https://discord.gg/eWC3CSxkQM")
-end)
 
 local ThemeButton = New("TextButton", {
     Name = "ThemeButton",
