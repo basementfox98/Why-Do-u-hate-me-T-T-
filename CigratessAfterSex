@@ -1681,8 +1681,19 @@ local HudInner = New("Frame", {
 }, Hud)
 Corner(HudInner, 8)
 
-local HudName = New("TextLabel", {
+-- Emote-name display. Short names stay static; long names use a smooth
+-- right-to-left marquee so the complete name can still be read.
+local HudNameClip = New("Frame", {
     Position = UDim2.fromOffset(10, 5),
+    Size = UDim2.fromOffset(145, 17),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ClipsDescendants = true,
+    ZIndex = 52,
+}, HudInner)
+
+local HudName = New("TextLabel", {
+    Position = UDim2.fromOffset(0, 0),
     Size = UDim2.fromOffset(145, 17),
     BackgroundTransparency = 1,
     Font = BOLD,
@@ -1690,9 +1701,89 @@ local HudName = New("TextLabel", {
     TextSize = 9,
     TextXAlignment = Enum.TextXAlignment.Left,
     TextColor3 = WHITE,
-    ZIndex = 52,
-}, HudInner)
+    ZIndex = 53,
+}, HudNameClip)
 TextGradient(HudName)
+
+local HudNameMarquee = New("TextLabel", {
+    Position = UDim2.fromOffset(0, 0),
+    Size = UDim2.fromOffset(0, 17),
+    AutomaticSize = Enum.AutomaticSize.X,
+    BackgroundTransparency = 1,
+    Font = BOLD,
+    Text = "",
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextColor3 = WHITE,
+    Visible = false,
+    ZIndex = 53,
+}, HudNameClip)
+TextGradient(HudNameMarquee)
+
+local HudNameGeneration = 0
+
+local function SetHudEmoteName(name)
+    HudNameGeneration += 1
+    local generation = HudNameGeneration
+    name = tostring(name or "No emote")
+
+    -- Reset the marquee first.
+    HudNameMarquee.Visible = false
+    HudNameMarquee.Text = ""
+    HudNameMarquee.Position = UDim2.fromOffset(0, 0)
+
+    HudName.Text = name
+    HudName.Visible = true
+
+    task.defer(function()
+        if generation ~= HudNameGeneration or not HudName.Parent then return end
+
+        -- Give TextBounds a frame to update.
+        task.wait()
+        if generation ~= HudNameGeneration then return end
+
+        local textWidth = HudName.TextBounds.X
+        local availableWidth = HudNameClip.AbsoluteSize.X
+
+        if textWidth <= availableWidth then
+            return
+        end
+
+        -- Use the marquee label only when the name is actually too long.
+        HudName.Visible = false
+        HudNameMarquee.Text = name
+        HudNameMarquee.Size = UDim2.fromOffset(textWidth, 17)
+        HudNameMarquee.Position = UDim2.fromOffset(availableWidth, 0)
+        HudNameMarquee.Visible = true
+
+        task.spawn(function()
+            -- Small pause before each pass, then travel right-to-left.
+            task.wait(0.65)
+
+            while generation == HudNameGeneration
+                and HudNameMarquee.Parent
+                and HudNameMarquee.Visible do
+
+                local width = HudNameMarquee.TextBounds.X
+                local distance = width + availableWidth
+                local duration = math.clamp(distance / 42, 2.8, 7.5)
+
+                HudNameMarquee.Position = UDim2.fromOffset(availableWidth, 0)
+
+                local tween = TweenService:Create(
+                    HudNameMarquee,
+                    TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut),
+                    {Position = UDim2.fromOffset(-width, 0)}
+                )
+                tween:Play()
+                tween.Completed:Wait()
+
+                if generation ~= HudNameGeneration then break end
+                task.wait(0.7)
+            end
+        end)
+    end)
+end
 
 local HudSpeed = New("TextLabel", {
     Position = UDim2.fromOffset(10, 23),
@@ -1816,6 +1907,10 @@ local function GetAnimator()
 end
 
 local function StopEmote()
+    HudNameGeneration += 1
+    HudNameMarquee.Visible = false
+    HudNameMarquee.Text = ""
+    HudName.Visible = true
     if TrackConnection then
         TrackConnection:Disconnect()
         TrackConnection = nil
@@ -1931,7 +2026,7 @@ local function PlayEmote(emote)
             return
         end
 
-        HudName.Text = emote.name
+        SetHudEmoteName(emote.name)
         HudSpeed.Text = string.format("%.2fx", Settings.Speed)
         Hud.Visible = true
 
@@ -2029,7 +2124,7 @@ CopyPlayingAnimationFrom = function(targetCharacter)
                 name = "Copied Emote",
             }
 
-            HudName.Text = "Copied Emote"
+            SetHudEmoteName("Copied Emote")
             HudSpeed.Text = string.format("%.2fx", speed)
             Hud.Visible = true
 
