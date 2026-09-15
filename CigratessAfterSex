@@ -850,15 +850,16 @@ local Subtitle = New("TextLabel", {
 }, Header)
 
 --============================================================
--- SAIKI SOCIAL BUTTONS — ISOLATED / FAIL-SAFE
--- This block is completely isolated from the core GUI boot path.
--- If anything about the optional social controls fails in an executor,
--- the error is swallowed and the rest of Saiki Emotes continues loading.
--- No HTTP, request, writefile, getcustomasset, or external image is used.
+-- SAIKI SOCIAL BUTTONS — IMAGE ICONS / FAIL-SAFE
+-- Uses downloaded PNGs only when the executor supports custom assets.
+-- If image downloading is unavailable, the buttons remain as simple text icons.
 --============================================================
 do
-    local ok = pcall(function()
-        local function addSocialButton(name, text, x, url)
+    pcall(function()
+        local SOCIAL_INSTAGRAM_IMAGE = "https://cdn-icons-png.flaticon.com/512/174/174855.png"
+        local SOCIAL_DISCORD_IMAGE = "https://cdn-icons-png.flaticon.com/512/5968/5968756.png"
+
+        local function addSocialButton(name, x, url, imageUrl, fallbackText)
             local b = Instance.new("TextButton")
             b.Name = name
             b.Size = UDim2.fromOffset(28, 28)
@@ -867,9 +868,9 @@ do
             b.BackgroundTransparency = 0.08
             b.BorderSizePixel = 0
             b.AutoButtonColor = false
-            b.Text = text
-            b.Font = Enum.Font.GothamBold
-            b.TextSize = 10
+            b.Text = fallbackText
+            b.Font = BOLD
+            b.TextSize = 9
             b.TextColor3 = WHITE
             b.ZIndex = 8
             b.Parent = Header
@@ -884,27 +885,60 @@ do
             st.Color = DARK_RED
             st.Parent = b
 
-            b.MouseEnter:Connect(function()
-                b.BackgroundTransparency = 0
-            end)
-            b.MouseLeave:Connect(function()
-                b.BackgroundTransparency = 0.08
-            end)
+            local icon = Instance.new("ImageLabel")
+            icon.Name = "Icon"
+            icon.AnchorPoint = Vector2.new(0.5, 0.5)
+            icon.Position = UDim2.fromScale(0.5, 0.5)
+            icon.Size = UDim2.fromOffset(17, 17)
+            icon.BackgroundTransparency = 1
+            icon.Image = ""
+            icon.ScaleType = Enum.ScaleType.Fit
+            icon.ZIndex = 9
+            icon.Parent = b
 
-            -- Only copy the link if a supported clipboard function exists.
+            b.MouseEnter:Connect(function() b.BackgroundTransparency = 0 end)
+            b.MouseLeave:Connect(function() b.BackgroundTransparency = 0.08 end)
+
             b.Activated:Connect(function()
                 pcall(function()
                     local fn = setclipboard or toclipboard or set_clipboard
-                    if type(fn) == "function" then
-                        fn(url)
+                    if type(fn) == "function" then fn(url) end
+                end)
+            end)
+
+            task.spawn(function()
+                pcall(function()
+                    local getter = getcustomasset or getsynasset
+                    if type(writefile) ~= "function" or type(getter) ~= "function" then
+                        return
+                    end
+
+                    local path = "SaikiEmotes_" .. name .. ".png"
+                    local ok, data = pcall(function()
+                        return game:HttpGet(imageUrl)
+                    end)
+                    if not ok or type(data) ~= "string" or #data < 100 then
+                        return
+                    end
+
+                    local wrote = pcall(function()
+                        writefile(path, data)
+                    end)
+                    if not wrote then return end
+
+                    local assetOk, asset = pcall(function()
+                        return getter(path)
+                    end)
+                    if assetOk and type(asset) == "string" and asset ~= "" and icon.Parent then
+                        icon.Image = asset
+                        b.Text = ""
                     end
                 end)
             end)
         end
 
-        -- Title ends around x=274, so these sit directly beside it.
-        addSocialButton("InstagramButton", "IG", 278, "https://www.instagram.com/saiki_hu_lol/")
-        addSocialButton("DiscordButton", "DC", 310, "https://discord.gg/eWC3CSxkQM")
+        addSocialButton("InstagramButton", 278, "https://www.instagram.com/saiki_hu_lol/", SOCIAL_INSTAGRAM_IMAGE, "IG")
+        addSocialButton("DiscordButton", 310, "https://discord.gg/eWC3CSxkQM", SOCIAL_DISCORD_IMAGE, "DC")
     end)
 end
 
