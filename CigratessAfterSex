@@ -859,11 +859,11 @@ do
         local SOCIAL_INSTAGRAM_IMAGE = "https://cdn-icons-png.flaticon.com/512/174/174855.png"
         local SOCIAL_DISCORD_IMAGE = "https://cdn-icons-png.flaticon.com/512/5968/5968756.png"
 
-        local function addSocialButton(name, x, url, imageUrl, fallbackText)
+        local function addSocialButton(name, url, imageUrl, fallbackText)
             local b = Instance.new("TextButton")
             b.Name = name
             b.Size = UDim2.fromOffset(30, 30)
-            b.Position = UDim2.fromOffset(x, 6)
+            b.Position = UDim2.fromOffset(0, 6)
             b.BackgroundColor3 = BLACK_2
             b.BackgroundTransparency = 0.08
             b.BorderSizePixel = 0
@@ -935,10 +935,31 @@ do
                     end
                 end)
             end)
+
+            return b
         end
 
-        addSocialButton("InstagramButton", 278, "https://www.instagram.com/saiki_hu_lol/", SOCIAL_INSTAGRAM_IMAGE, "IG")
-        addSocialButton("DiscordButton", 312, "https://discord.gg/eWC3CSxkQM", SOCIAL_DISCORD_IMAGE, "DC")
+        local InstagramButton = addSocialButton("InstagramButton", "https://www.instagram.com/saiki_hu_lol/", SOCIAL_INSTAGRAM_IMAGE, "IG")
+        local DiscordButton = addSocialButton("DiscordButton", "https://discord.gg/eWC3CSxkQM", SOCIAL_DISCORD_IMAGE, "DC")
+
+        -- Place both buttons immediately after the actual SAIKI EMOTES text.
+        -- The gap is the same 4px used between the title icon and title.
+        local function AlignSocialButtons()
+            local titleRight = Title.Position.X.Offset + Title.TextBounds.X
+            local gap = 4
+            InstagramButton.Position = UDim2.fromOffset(titleRight + gap, 9)
+            DiscordButton.Position = UDim2.fromOffset(titleRight + gap + InstagramButton.AbsoluteSize.X + gap, 9)
+        end
+
+        task.defer(function()
+            task.wait()
+            AlignSocialButtons()
+            task.wait(0.1)
+            AlignSocialButtons()
+        end)
+
+        Title:GetPropertyChangedSignal("TextBounds"):Connect(AlignSocialButtons)
+        Header:GetPropertyChangedSignal("AbsoluteSize"):Connect(AlignSocialButtons)
     end)
 end
 
